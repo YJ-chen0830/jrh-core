@@ -52,7 +52,7 @@ window.addEventListener('beforeprint', function(){
 window.jrhPrint=function(docName){
   window.__jrhDocName=docName;
   var el=document.getElementById('pj-name');
-  var pj=(el&&el.value.trim())||'未命名工程';
+  var pj=(el&&el.value.trim())||(localStorage.getItem('jrh_proj_pj-name')||'').trim()||'未命名工程';
   var d=new Date();
   var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   var old=document.title;
@@ -124,7 +124,7 @@ window.jrhPrint=function(docName){
    列印時自動產生封面（需有 pj-name 欄位）與規範/一般事項頁。 */
 (function(){
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-  function get(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+  function get(id){var el=document.getElementById(id);if(el)return el.value.trim();return (localStorage.getItem('jrh_proj_'+id)||'').trim();}
   function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 
   /* print-only CSS */
@@ -157,7 +157,7 @@ window.jrhPrint=function(docName){
 
   function buildCover(){
     var old=document.getElementById('jrh-cover');if(old)old.remove();
-    if(!document.getElementById('pj-name'))return; /* 無專案欄位的工具不做封面 */
+    if(!document.getElementById('pj-name')&&!(localStorage.getItem('jrh_proj_pj-name')||'').trim())return;
     var meta=window.jrhDocMeta||{};
     var docName=meta.doc||(window.__jrhDocName)||document.title.split('|')[0].trim();
     var rows=[
@@ -215,7 +215,7 @@ window.jrhPrint=function(docName){
   window.jrhPrint=function(docName){
     try{
       var nameEl=document.getElementById('pj-name');
-      var proj=nameEl?nameEl.value.trim():'';
+      var proj=nameEl?nameEl.value.trim():(localStorage.getItem('jrh_proj_pj-name')||'').trim();
       var tool=(document.body&&document.body.dataset&&document.body.dataset.tool)||'';
       if(proj&&tool){
         var wf=getWf();
