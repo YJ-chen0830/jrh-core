@@ -200,3 +200,63 @@ window.jrhPrint=function(docName){
 
   window.addEventListener('beforeprint',function(){buildCover();buildNotes();});
 })();
+
+/* ── 專案工作流 ──
+   1. jrhPrint 產出 PDF 時自動記錄完成狀態（jrh_wf）
+   2. 網址 ?proj=專案名 開啟時自動載入該專案
+   3. FAB 增加「專案工作流」入口 */
+(function(){
+  var WF='jrh_wf';
+  function getWf(){try{return JSON.parse(localStorage.getItem(WF))||{};}catch(e){return{};}}
+  function setWf(o){localStorage.setItem(WF,JSON.stringify(o));}
+
+  /* 產出 PDF 時打卡：包裝 jrhPrint */
+  var orig=window.jrhPrint;
+  window.jrhPrint=function(docName){
+    try{
+      var nameEl=document.getElementById('pj-name');
+      var proj=nameEl?nameEl.value.trim():'';
+      var tool=(document.body&&document.body.dataset&&document.body.dataset.tool)||'';
+      if(proj&&tool){
+        var wf=getWf();
+        if(!wf[proj])wf[proj]={};
+        var d=new Date();
+        wf[proj][tool]={doc:docName||document.title,date:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+        setWf(wf);
+      }
+    }catch(e){}
+    orig(docName);
+  };
+
+  /* ?proj= 自動載入 */
+  function autoLoad(){
+    var m=location.search.match(/[?&]proj=([^&]+)/);
+    if(!m)return;
+    var name=decodeURIComponent(m[1].replace(/\+/g,' '));
+    var all;try{all=JSON.parse(localStorage.getItem('jrh_projects'))||{};}catch(e){return;}
+    var proj=all[name];
+    if(!proj)return;
+    Object.keys(proj).forEach(function(id){
+      var el=document.getElementById(id);
+      if(el){el.value=proj[id];localStorage.setItem('jrh_proj_'+id,proj[id]);}
+    });
+    var sel=document.getElementById('jrh-proj-sel');
+    if(sel)sel.value=name;
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',autoLoad);
+  else autoLoad();
+
+  /* FAB 入口 */
+  function addFabLink(){
+    var fab=document.getElementById('jrh-fab');
+    if(!fab||document.getElementById('jrh-fab-wf'))return;
+    var a=document.createElement('a');
+    a.className='jrh-fb-fab';a.id='jrh-fab-wf';
+    a.href='https://yj-chen0830.github.io/engineering-hub/workflow.html';
+    a.style.cssText='background:#c9a14a;color:#0b1f3a;text-decoration:none;';
+    a.textContent='📁 專案工作流';
+    fab.insertBefore(a,fab.firstChild);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addFabLink);
+  else setTimeout(addFabLink,300);
+})();
