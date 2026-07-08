@@ -59,3 +59,61 @@ window.jrhPrint=function(docName){
   window.addEventListener('afterprint',function(){document.title=old;},{once:true});
   window.print();
 };
+
+/* ── 多專案切換 ──
+   有 .proj-section 的工具自動注入專案下拉選單。
+   儲存於 jrh_projects（JSON），專案名稱取自「工程名稱」欄位。 */
+(function(){
+  var LIST='jrh_projects';
+  function getAll(){try{return JSON.parse(localStorage.getItem(LIST))||{};}catch(e){return{};}}
+  function setAll(o){localStorage.setItem(LIST,JSON.stringify(o));}
+  function fields(){return document.querySelectorAll('input[id^="pj-"],select[id^="pj-"],textarea[id^="pj-"]');}
+  function snapshot(){var o={};fields().forEach(function(el){o[el.id]=el.value;});return o;}
+  function apply(o){fields().forEach(function(el){
+    if(o[el.id]!==undefined){el.value=o[el.id];localStorage.setItem('jrh_proj_'+el.id,el.value);}
+  });}
+  function init(){
+    var sec=document.querySelector('.proj-section');
+    if(!sec||document.getElementById('jrh-proj-sel'))return;
+    if(!fields().length)return;
+    var bar=document.createElement('div');
+    bar.className='no-print';
+    bar.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;';
+    bar.innerHTML=
+      '<select id="jrh-proj-sel" style="flex:1;min-width:150px;width:auto;padding:8px 10px;border:1.5px solid #d8d2c2;border-radius:7px;font-size:13px;background:#fafaf8;margin:0;"></select>'+
+      '<button type="button" id="jrh-proj-save" style="margin:0;width:auto;padding:8px 14px;font-size:12.5px;font-weight:700;border:none;border-radius:7px;background:#0b1f3a;color:#fff;cursor:pointer;">💾 儲存專案</button>'+
+      '<button type="button" id="jrh-proj-del" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1px solid #c0392b;border-radius:7px;background:#fff;color:#c0392b;cursor:pointer;">刪除</button>';
+    var h3=sec.querySelector('h3');
+    if(h3&&h3.nextSibling) sec.insertBefore(bar,h3.nextSibling);
+    else sec.insertBefore(bar,sec.firstChild);
+    var sel=document.getElementById('jrh-proj-sel');
+    function refresh(keep){
+      var all=getAll(),names=Object.keys(all).sort();
+      sel.innerHTML='<option value="">── 切換已存專案 ──</option>'+
+        names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
+      if(keep&&all[keep])sel.value=keep;
+    }
+    refresh();
+    sel.addEventListener('change',function(){
+      if(!sel.value)return;
+      var all=getAll();
+      if(all[sel.value])apply(all[sel.value]);
+    });
+    document.getElementById('jrh-proj-save').addEventListener('click',function(){
+      var nameEl=document.getElementById('pj-name');
+      var name=(nameEl&&nameEl.value.trim())||'';
+      if(!name){alert('請先填寫「工程名稱」再儲存專案。');return;}
+      var all=getAll();all[name]=snapshot();setAll(all);
+      refresh(name);
+      var btn=this,t=btn.textContent;btn.textContent='✔ 已儲存';
+      setTimeout(function(){btn.textContent=t;},1200);
+    });
+    document.getElementById('jrh-proj-del').addEventListener('click',function(){
+      if(!sel.value){alert('請先從下拉選單選擇要刪除的專案。');return;}
+      if(!confirm('確定刪除專案「'+sel.value+'」的已存資料？（不影響目前表單內容）'))return;
+      var all=getAll();delete all[sel.value];setAll(all);refresh();
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
