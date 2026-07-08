@@ -50,6 +50,7 @@ window.addEventListener('beforeprint', function(){
 /* ── PDF 檔名自動化 ──
    jrhPrint('施工架計算書') → 另存 PDF 檔名為「工程名稱_施工架計算書_2026-07-07.pdf」 */
 window.jrhPrint=function(docName){
+  window.__jrhDocName=docName;
   var el=document.getElementById('pj-name');
   var pj=(el&&el.value.trim())||'未命名工程';
   var d=new Date();
@@ -116,4 +117,86 @@ window.jrhPrint=function(docName){
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
   else init();
+})();
+
+/* ── 正式計算書：封面頁 + 設計依據與一般事項 + 表頭跨頁重複 ──
+   各工具定義 window.jrhDocMeta = { doc:'計算書名稱', codes:[...], notes:[...] }
+   列印時自動產生封面（需有 pj-name 欄位）與規範/一般事項頁。 */
+(function(){
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function get(id){var el=document.getElementById(id);return el?el.value.trim():'';}
+  function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
+  /* print-only CSS */
+  var css=document.createElement('style');
+  css.id='jrh-doc-css';
+  css.textContent=
+    '#jrh-cover,#jrh-notes{display:none;}'+
+    '@media print{'+
+      'thead{display:table-header-group;}'+
+      '.print-sig{display:none!important;}'+
+      '#jrh-cover{display:flex!important;flex-direction:column;height:255mm;page-break-after:always;font-family:"Noto Sans TC","Segoe UI",sans-serif;color:#111;}'+
+      '#jrh-cover .jc-office{text-align:center;font-size:11pt;font-weight:700;color:#0b1f3a;letter-spacing:.35em;margin-top:18pt;}'+
+      '#jrh-cover .jc-line{width:60%;margin:10pt auto 0;border-bottom:2pt solid #c9a14a;}'+
+      '#jrh-cover .jc-mid{flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;}'+
+      '#jrh-cover .jc-proj{font-size:20pt;font-weight:700;color:#0b1f3a;line-height:1.5;margin-bottom:10pt;}'+
+      '#jrh-cover .jc-doc{font-size:15pt;font-weight:700;color:#333;letter-spacing:.2em;}'+
+      '#jrh-cover table{width:70%;margin:26pt auto 0;border-collapse:collapse;font-size:10pt;}'+
+      '#jrh-cover th{background:#f0ece4!important;color:#0b1f3a;font-weight:700;text-align:left;width:30%;padding:7pt 10pt;border:1pt solid #999;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+      '#jrh-cover td{padding:7pt 10pt;border:1pt solid #999;}'+
+      '#jrh-cover .jc-sig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;width:86%;margin:0 auto 20pt;border:1pt solid #999;}'+
+      '#jrh-cover .jc-sig>div{border-right:1pt solid #999;padding:8pt 10pt 34pt;font-size:9pt;color:#555;}'+
+      '#jrh-cover .jc-sig>div:last-child{border-right:none;}'+
+      '#jrh-notes{display:block!important;margin-top:14pt;border:1pt solid #0b1f3a;border-radius:4pt;background:#f9f9f6!important;break-inside:avoid;padding:0 0 8pt;}'+
+      '#jrh-notes h4{font-size:9pt;font-weight:700;color:#0b1f3a;padding:8pt 12pt 4pt;margin:0;border-bottom:1pt solid #ccc;letter-spacing:.05em;}'+
+      '#jrh-notes h5{font-size:8.5pt;font-weight:700;color:#0b1f3a;margin:8pt 12pt 2pt;}'+
+      '#jrh-notes ol{margin:2pt 0 4pt;padding-left:26pt;}'+
+      '#jrh-notes li{font-size:8pt;line-height:1.8;color:#222;}'+
+    '}';
+  document.head.appendChild(css);
+
+  function buildCover(){
+    var old=document.getElementById('jrh-cover');if(old)old.remove();
+    if(!document.getElementById('pj-name'))return; /* 無專案欄位的工具不做封面 */
+    var meta=window.jrhDocMeta||{};
+    var docName=meta.doc||(window.__jrhDocName)||document.title.split('|')[0].trim();
+    var rows=[
+      ['工程地點',get('pj-loc')],['承造廠商',get('pj-contractor')],
+      ['文件編號',get('pj-docno')],['計算日期',get('pj-date')||today()]
+    ].filter(function(r){return r[1];});
+    var cover=document.createElement('div');
+    cover.id='jrh-cover';
+    cover.innerHTML=
+      '<div class="jc-office">儒鴻結構技師事務所</div><div class="jc-line"></div>'+
+      '<div class="jc-mid">'+
+        '<div class="jc-proj">'+esc(get('pj-name')||'（未填寫工程名稱）')+'</div>'+
+        '<div class="jc-doc">'+esc(docName)+'</div>'+
+        (rows.length?'<table>'+rows.map(function(r){return '<tr><th>'+r[0]+'</th><td>'+esc(r[1])+'</td></tr>';}).join('')+'</table>':'')+
+      '</div>'+
+      '<div class="jc-sig">'+
+        '<div>計算者 Prepared by'+(get('pj-calc')?'<br><br>'+esc(get('pj-calc')):'')+'</div>'+
+        '<div>審核者 Checked by'+(get('pj-review')?'<br><br>'+esc(get('pj-review')):'')+'</div>'+
+        '<div>核准者 Approved by</div>'+
+      '</div>';
+    document.body.insertBefore(cover,document.body.firstChild);
+  }
+
+  function buildNotes(){
+    var old=document.getElementById('jrh-notes');if(old)old.remove();
+    var meta=window.jrhDocMeta||{};
+    if(!(meta.codes&&meta.codes.length)&&!(meta.notes&&meta.notes.length))return;
+    var d=document.createElement('div');
+    d.id='jrh-notes';
+    var h='<h4>📌 設計依據與一般事項</h4>';
+    if(meta.codes&&meta.codes.length)
+      h+='<h5>一、設計依據</h5><ol>'+meta.codes.map(function(c){return '<li>'+esc(c)+'</li>';}).join('')+'</ol>';
+    if(meta.notes&&meta.notes.length)
+      h+='<h5>二、一般事項</h5><ol>'+meta.notes.map(function(n){return '<li>'+esc(n)+'</li>';}).join('')+'</ol>';
+    d.innerHTML=h;
+    var footer=document.querySelector('.print-footer');
+    if(footer&&footer.parentElement)footer.parentElement.insertBefore(d,footer);
+    else (document.querySelector('main')||document.body).appendChild(d);
+  }
+
+  window.addEventListener('beforeprint',function(){buildCover();buildNotes();});
 })();
