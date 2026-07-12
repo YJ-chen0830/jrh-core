@@ -260,3 +260,69 @@ window.jrhPrint=function(docName){
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addFabLink);
   else setTimeout(addFabLink,300);
 })();
+
+/* ── 跨工具資料傳遞（組合技）──
+   來源工具算完後呼叫 JRH.saveOutput({...}) 將結果存入目前專案。
+   下游工具用 JRH.showInboundBanner('來源工具代碼','來源工具名稱',function(data){...帶入自己的欄位...})
+   偵測是否有可帶入的上游結果，並顯示提示條（使用者仍可選擇忽略，不會自動覆蓋）。
+   資料儲存於 jrh_outputs（依專案名稱、工具代碼分層），與 jrh_projects/jrh_wf 為同一套 key 慣例。 */
+(function(){
+  var OUT='jrh_outputs';
+  function getAllOut(){try{return JSON.parse(localStorage.getItem(OUT))||{};}catch(e){return{};}}
+  function setAllOut(o){localStorage.setItem(OUT,JSON.stringify(o));}
+  function currentProj(){
+    var el=document.getElementById('pj-name');
+    return (el?el.value.trim():'')||(localStorage.getItem('jrh_proj_pj-name')||'').trim();
+  }
+  function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
+  function saveOutput(data){
+    var proj=currentProj();
+    var tool=(document.body&&document.body.dataset&&document.body.dataset.tool)||'';
+    if(!proj||!tool)return;
+    var all=getAllOut();
+    if(!all[proj])all[proj]={};
+    all[proj][tool]={data:data,date:today()};
+    setAllOut(all);
+  }
+  function getOutput(toolCode){
+    var proj=currentProj();
+    if(!proj)return null;
+    var all=getAllOut();
+    return (all[proj]&&all[proj][toolCode])||null;
+  }
+  function injectBannerStyles(){
+    if(document.getElementById('jrh-inbound-css'))return;
+    var s=document.createElement('style');s.id='jrh-inbound-css';
+    s.textContent='.jrh-inbound{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fdf7ec;border:1.5px dashed #c9a14a;border-radius:9px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#333;}.jrh-inbound b{color:#0b1f3a;}.jrh-inbound .jrh-in-btns{display:flex;gap:8px;margin-left:auto;}.jrh-inbound button{padding:7px 14px;border-radius:6px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;}.jrh-in-yes{background:#0b1f3a;color:#fff;}.jrh-in-no{background:#eee;color:#666;}';
+    document.head.appendChild(s);
+  }
+  function showInboundBanner(sourceToolCode,sourceLabel,onAccept){
+    var out=getOutput(sourceToolCode);
+    if(!out)return false;
+    var selfTool=(document.body&&document.body.dataset&&document.body.dataset.tool)||'';
+    var dismissKey='jrh_inbound_dismiss_'+currentProj()+'_'+sourceToolCode+'_'+selfTool;
+    if(sessionStorage.getItem(dismissKey))return false;
+    injectBannerStyles();
+    var host=document.querySelector('main')||document.body;
+    var target=document.querySelector('.grid')||document.querySelector('.card')||host.firstChild;
+    var bar=document.createElement('div');
+    bar.className='jrh-inbound no-print';
+    bar.innerHTML='<span>💡 偵測到來自 <b>「'+sourceLabel+'」</b>（'+out.date+'）的計算結果，是否帶入？</span><div class="jrh-in-btns"><button type="button" class="jrh-in-yes">帶入</button><button type="button" class="jrh-in-no">忽略</button></div>';
+    if(target&&target.parentElement)target.parentElement.insertBefore(bar,target);
+    else host.insertBefore(bar,host.firstChild);
+    bar.querySelector('.jrh-in-yes').addEventListener('click',function(){
+      onAccept(out.data);
+      bar.remove();
+    });
+    bar.querySelector('.jrh-in-no').addEventListener('click',function(){
+      sessionStorage.setItem(dismissKey,'1');
+      bar.remove();
+    });
+    return true;
+  }
+  window.JRH=window.JRH||{};
+  window.JRH.saveOutput=saveOutput;
+  window.JRH.getOutput=getOutput;
+  window.JRH.showInboundBanner=showInboundBanner;
+})();
