@@ -195,17 +195,22 @@ window.jrhPrint=function(docName){
     document.body.insertBefore(cover,document.body.firstChild);
   }
 
+  // Appended to every tool's notes list regardless of what (if anything) the
+  // tool itself defines — some earlier tools have no jrhDocMeta at all,
+  // others phrase the "needs a licensed engineer's sign-off" point
+  // inconsistently or omit it. This guarantees it's always present verbatim.
+  var STANDARD_DISCLAIMER='本工具計算結果與PDF文件僅供工程初步評估、方案比較與第三方檢核參考，不取代正式設計計算書，亦不具技師簽證效力；正式送審、施工或驗收文件，應由具資格之專業技師依實際工程條件複核並簽證後方可使用。';
   function buildNotes(){
     var old=document.getElementById('jrh-notes');if(old)old.remove();
     var meta=window.jrhDocMeta||{};
-    if(!(meta.codes&&meta.codes.length)&&!(meta.notes&&meta.notes.length))return;
+    var notes=(meta.notes&&meta.notes.length)?meta.notes.slice():[];
+    notes.push(STANDARD_DISCLAIMER);
     var d=document.createElement('div');
     d.id='jrh-notes';
     var h='<h4>📌 設計依據與一般事項</h4>';
     if(meta.codes&&meta.codes.length)
       h+='<h5>一、設計依據</h5><ol>'+meta.codes.map(function(c){return '<li>'+esc(c)+'</li>';}).join('')+'</ol>';
-    if(meta.notes&&meta.notes.length)
-      h+='<h5>二、一般事項</h5><ol>'+meta.notes.map(function(n){return '<li>'+esc(n)+'</li>';}).join('')+'</ol>';
+    h+='<h5>二、一般事項</h5><ol>'+notes.map(function(n){return '<li>'+esc(n)+'</li>';}).join('')+'</ol>';
     d.innerHTML=h;
     var footer=document.querySelector('.print-footer');
     if(footer&&footer.parentElement)footer.parentElement.insertBefore(d,footer);
