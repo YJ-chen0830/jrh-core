@@ -345,3 +345,63 @@ window.jrhPrint=function(docName){
   window.JRH.getOutput=getOutput;
   window.JRH.showInboundBanner=showInboundBanner;
 })();
+
+/* ── 計算書示意圖共用元件（SVG）──
+   各工具在算完之後呼叫 JRH.diagram.wrap(...) 組出的 HTML 字串，直接塞進自己
+   的 result innerHTML 即可（會跟著印在畫面上與 PDF 裡，不需要另外處理）。
+   顏色慣例：navy 用於結構/尺寸標註，紅色用於力/壓力/反力，金色用於警示區域
+   （如基礎中央三分之一），OK/NG 判定沿用各工具既有的綠/紅字。
+   座標一律用等比例尺（同一個 px/單位 用在 x、y 兩軸），避免示意圖變形失真；
+   若構件太細（如樁徑相對樁長）則另外用固定像素寬度誇大顯示，並在圖說註明
+   「比例尺概略」，這是工程示意圖常見做法，不是誤導。 */
+(function(){
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  function defs(){
+    return '<defs>'
+      +'<pattern id="jrhSoil" width="8" height="8" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><line x1="0" y1="0" x2="0" y2="8" stroke="#8a7a5c" stroke-width="1.3"/></pattern>'
+      +'<pattern id="jrhConcrete" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="9" height="9" fill="#e9e6dc"/><circle cx="2.2" cy="2.2" r=".7" fill="#b8b2a0"/><circle cx="6.5" cy="6.5" r=".7" fill="#b8b2a0"/></pattern>'
+      +'<marker id="jrhArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#c0392b"/></marker>'
+      +'<marker id="jrhArrowNavy" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#5c5442"/></marker>'
+      +'</defs>';
+  }
+
+  /* 把示意圖內容包成完整 <svg>，w/h 為 viewBox 邏輯座標（非實際像素） */
+  function wrap(w,h,inner,opts){
+    opts=opts||{};
+    return '<div class="jrh-diagram no-select" style="margin:14px 0;text-align:center;">'
+      +'<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="max-width:'+(opts.maxWidth||440)+'px;height:auto;font-family:\'Noto Sans TC\',\'Segoe UI\',sans-serif;" xmlns="http://www.w3.org/2000/svg">'
+      +defs()+inner
+      +'</svg></div>';
+  }
+
+  /* 兩端帶箭頭的尺寸標註線 + 置中文字（水平/垂直皆可，依 x1==x2 或 y1==y2 判斷） */
+  function dim(x1,y1,x2,y2,text,opts){
+    opts=opts||{};
+    var color=opts.color||'#5c5442';
+    var isH=Math.abs(y1-y2)<0.01;
+    var mx=(x1+x2)/2, my=(y1+y2)/2;
+    var out='<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+color+'" stroke-width="1" marker-start="url(#jrhArrowNavy)" marker-end="url(#jrhArrowNavy)"/>';
+    if(isH){
+      out+='<text x="'+mx+'" y="'+(my-4)+'" font-size="9" fill="'+color+'" text-anchor="middle">'+esc(text)+'</text>';
+    }else{
+      out+='<text x="'+(mx-4)+'" y="'+my+'" font-size="9" fill="'+color+'" text-anchor="middle" transform="rotate(-90 '+(mx-4)+' '+my+')">'+esc(text)+'</text>';
+    }
+    return out;
+  }
+
+  /* 單向箭頭（表示力、壓力、反力方向） */
+  function arrow(x1,y1,x2,y2,opts){
+    opts=opts||{};
+    return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(opts.color||'#c0392b')+'" stroke-width="'+(opts.width||1.6)+'" marker-end="url(#jrhArrow)"/>';
+  }
+
+  /* 純文字標籤 */
+  function label(x,y,text,opts){
+    opts=opts||{};
+    return '<text x="'+x+'" y="'+y+'" font-size="'+(opts.size||10)+'" fill="'+(opts.color||'#1c2530')+'" text-anchor="'+(opts.anchor||'middle')+'" font-weight="'+(opts.weight||'400')+'">'+esc(text)+'</text>';
+  }
+
+  window.JRH=window.JRH||{};
+  window.JRH.diagram={wrap:wrap,dim:dim,arrow:arrow,label:label,esc:esc};
+})();
