@@ -41,7 +41,9 @@
 
 ## 目前已登記的 TOOL_CODE（新工具請避開這些，並回來這裡補上你的）
 
-`pb sc fw sh lf tb tm ro rb fn hyd lc sw bsm rcb rcd rcpm spl stc dwt dr adm mx prw gad asd csd stk sla spc buc ffa phl scu ssc tbm dwd esd tsp ssb mfv pss gsd fsh cna ssd sls bsg scd cct std tsb hdc wfc hjc beb ejm tfe bsl fpd hcd vcd llp mfd pdh evm cfs rme lcc tia mml csv fpa tel feq cra ram cdh`
+`pb sc fw sh lf tb tm ro rb fn hyd lc sw bsm rcb rcd rcpm spl stc dwt dr adm mx prw gad asd csd stk sla spc buc ffa phl scu ssc tbm dwd esd tsp ssb ssbm mfv pss gsd fsh cna ssd sls bsg scd cct std tsb hdc wfc hjc beb ejm tfe bsl fpd hcd vcd llp mfd pdh evm cfs rme lcc tia mml csv fpa tel feq cra ram cdh`
+
+（`ssb` = slope-stability／無限邊坡法，`ssbm` = slope-stability-bishop／簡化Bishop法圓弧分片法——這兩個原本都誤用 `ssb`，2026-07 已修正 bishop 版本為 `ssbm`，避免 localStorage 資料互相覆蓋、專案工作流打卡對不上。新工具請避開這兩個碼。）
 （完整對照見 `engineering-hub/workflow.html` 的 `TOOLS` 陣列——這份清單是手動維護的，新增工具時務必回來加一行，不要只改 `index.html` 的卡片）
 
 ## 不屬於這個格式的情況
