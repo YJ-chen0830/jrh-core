@@ -237,7 +237,10 @@
         '<label>預設審核者</label><input id="jrh-acc-review" type="text" maxlength="200" value="'+(cached.defaultReviewer?String(cached.defaultReviewer).replace(/"/g,'&quot;'):'')+'">'+
         '<div id="jrh-acc-msg"></div>'+
         '<button id="jrh-acc-ok">儲存設定</button>'+
-        '<span id="jrh-acc-logout">登出</span>'+
+        '<div style="display:flex;justify-content:space-between;margin-top:12px;">'+
+          '<span id="jrh-acc-clear-local" style="font-size:11.5px;color:#bbb;cursor:pointer;">清除本機專案串接資料</span>'+
+          '<span id="jrh-acc-logout" style="margin-top:0;">登出</span>'+
+        '</div>'+
       '</div>';
     document.body.appendChild(ov);
     var msg=document.getElementById('jrh-acc-msg');
@@ -251,6 +254,26 @@
       window.JRH.cloudLogout();
       ov.remove();
       updateAccBtn();
+    });
+    // Two-tap confirm instead of a native confirm() dialog, consistent with
+    // the rest of this UI. Scoped to only the three cross-tool project-chain
+    // keys (jrh_outputs/jrh_projects/jrh_wf) — deliberately leaves the
+    // current page's own typed-in field values, login state, and email-gate
+    // consent untouched, since clearing those would be a surprising side
+    // effect of a button labeled "clear project-chain data".
+    var clearArmed=false;
+    document.getElementById('jrh-acc-clear-local').addEventListener('click',function(e){
+      if(!clearArmed){
+        clearArmed=true;
+        e.target.textContent='確定清除？（此瀏覽器上不可復原）';
+        e.target.style.color='#c00';
+        return;
+      }
+      localStorage.removeItem('jrh_outputs');
+      localStorage.removeItem('jrh_projects');
+      localStorage.removeItem('jrh_wf');
+      e.target.textContent='✔ 已清除';
+      e.target.style.color='#1a6e35';
     });
     document.getElementById('jrh-acc-ok').addEventListener('click',function(){
       msg.style.color='#c00';
@@ -622,9 +645,17 @@ window.jrhPrint=function(docName){
     injectBannerStyles();
     var host=document.querySelector('main')||document.body;
     var target=document.querySelector('.grid')||document.querySelector('.card')||host.firstChild;
+    // out.date is a plain 'YYYY-MM-DD' string (see saveOutput/today() above),
+    // safe to Date-parse directly. Old data usually just means "haven't
+    // revisited this project in a while", but it's also exactly what a
+    // reused project name across two unrelated real projects looks like —
+    // flagging it costs nothing and the alternative is silent cross-project
+    // data bleed with no signal at all.
+    var ageDays=Math.floor((Date.now()-new Date(out.date+'T00:00:00').getTime())/86400000);
+    var staleWarning=(ageDays>=30)?'（'+ageDays+' 天前，請確認這筆資料真的屬於目前這個工程專案）':'';
     var bar=document.createElement('div');
     bar.className='jrh-inbound no-print';
-    bar.innerHTML='<span>💡 偵測到來自 <b>「'+sourceLabel+'」</b>（'+out.date+'）的計算結果，是否帶入？</span><div class="jrh-in-btns"><button type="button" class="jrh-in-yes">帶入</button><button type="button" class="jrh-in-no">忽略</button></div>';
+    bar.innerHTML='<span>💡 偵測到來自 <b>「'+sourceLabel+'」</b>（'+out.date+'）的計算結果'+staleWarning+'，是否帶入？</span><div class="jrh-in-btns"><button type="button" class="jrh-in-yes">帶入</button><button type="button" class="jrh-in-no">忽略</button></div>';
     if(target&&target.parentElement)target.parentElement.insertBefore(bar,target);
     else host.insertBefore(bar,host.firstChild);
     bar.querySelector('.jrh-in-yes').addEventListener('click',function(){
