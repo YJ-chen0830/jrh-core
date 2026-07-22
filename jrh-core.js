@@ -94,12 +94,18 @@
       return p;
     });
   }
+  // Always resolves (never rejects on "email not found") — same
+  // enumeration-safety contract as the backend endpoint it calls.
+  function forgotPassword(email){
+    return api('/api/auth/forgot-password',{method:'POST',body:JSON.stringify({email:email})});
+  }
 
   global.JRH=global.JRH||{};
   global.JRH.isLoggedIn=isLoggedIn;
   global.JRH.cloudSignup=signup;
   global.JRH.cloudLogin=login;
   global.JRH.cloudLogout=logout;
+  global.JRH.forgotPassword=forgotPassword;
   global.JRH.getProfile=getProfile;
   global.JRH.getProfileCached=getProfileCached;
   global.JRH.saveProfile=saveProfile;
@@ -168,6 +174,7 @@
         '<div id="jrh-acc-tabs"><button type="button" class="jrh-acc-tab sel" data-t="login">登入</button><button type="button" class="jrh-acc-tab" data-t="signup">註冊新帳號</button></div>'+
         '<label>Email</label><input id="jrh-acc-email" type="email" autocomplete="email">'+
         '<label>密碼</label><input id="jrh-acc-pass" type="password" autocomplete="current-password">'+
+        '<div id="jrh-acc-forgot-row" style="text-align:right;margin-top:-8px;"><span id="jrh-acc-forgot" style="font-size:12px;color:#9A7B2A;cursor:pointer;">忘記密碼？</span></div>'+
         '<div id="jrh-acc-msg"></div>'+
         '<button id="jrh-acc-ok">登入</button>'+
       '</div>';
@@ -180,11 +187,23 @@
         b.classList.add('sel');
         mode=b.dataset.t;
         document.getElementById('jrh-acc-ok').textContent=mode==='login'?'登入':'註冊';
+        document.getElementById('jrh-acc-forgot-row').style.display=mode==='login'?'':'none';
         msg.textContent='';
       });
     });
     ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
     document.getElementById('jrh-acc-cl').addEventListener('click',function(){ov.remove();});
+    document.getElementById('jrh-acc-forgot').addEventListener('click',function(){
+      var email=document.getElementById('jrh-acc-email').value.trim();
+      if(!email){msg.style.color='#c00';msg.textContent='請先輸入 Email，再點忘記密碼。';return;}
+      window.JRH.forgotPassword(email).then(function(){
+        msg.style.color='#1a6e35';
+        msg.textContent='如果這個 Email 有註冊過，重設密碼連結已經寄出，請查收信箱。';
+      }).catch(function(){
+        msg.style.color='#c00';
+        msg.textContent='無法連線到伺服器，請稍後再試。';
+      });
+    });
     document.getElementById('jrh-acc-ok').addEventListener('click',function(){
       var email=document.getElementById('jrh-acc-email').value.trim();
       var pass=document.getElementById('jrh-acc-pass').value;
