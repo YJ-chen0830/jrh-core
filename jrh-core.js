@@ -674,6 +674,83 @@ window.jrhPrint=function(docName){
   window.JRH.showInboundBanner=showInboundBanner;
 })();
 
+/* ── 相關工具導覽 ──
+   跟 saveOutput/showInboundBanner 用的是同一批已知資料鏈關係，但那個banner
+   只有在「使用者剛好按對順序、且已有資料可帶入」時才會出現，平常瀏覽完全
+   看不出這些工具之間有關聯。這裡改成不看資料狀態，只要目前頁面的
+   data-tool 在關係表裡，就主動列出相關工具，讓串接本身變得看得見。 */
+(function(){
+  var TOOL_INFO={
+    adm:{label:'進度網圖與S曲線',url:'https://yj-chen0830.github.io/adm-and-Scurve/'},
+    rl:{label:'資源負荷計算書',url:'https://yj-chen0830.github.io/resource-loading/'},
+    scr:{label:'工期趕工成本分析',url:'https://yj-chen0830.github.io/schedule-crashing/'},
+    tia:{label:'工期展延分析',url:'https://yj-chen0830.github.io/schedule-delay-analysis/'},
+    bsm:{label:'梁剪力彎矩圖計算書',url:'https://yj-chen0830.github.io/beam-shear-and-moment-diagram/'},
+    rcb:{label:'RC 梁斷面設計計算書',url:'https://yj-chen0830.github.io/RC-Beam-Steel-Design/'},
+    lc:{label:'載重組合計算書',url:'https://yj-chen0830.github.io/load-combo/'},
+    rcd:{label:'RC 梁撓度計算書',url:'https://yj-chen0830.github.io/RC-Beams-deflection/'},
+    pta:{label:'抽水試驗分析計算書',url:'https://yj-chen0830.github.io/pumping-test-analysis/'},
+    dwt:{label:'降水計畫計算書',url:'https://yj-chen0830.github.io/dewatering/'},
+    pgs:{label:'基樁群樁效率與沉陷計算書',url:'https://yj-chen0830.github.io/pile-group-settlement/'},
+    stl:{label:'地層壓密沉陷量估算計算書',url:'https://yj-chen0830.github.io/settlement-calc/'},
+    ro:{label:'逕流廢水削減計畫計算書',url:'https://yj-chen0830.github.io/runoff/'},
+    dp:{label:'雨水滯洪池容量設計計算書',url:'https://yj-chen0830.github.io/detention-pond/'},
+    dr:{label:'雨水下水道及揚程計算書',url:'https://yj-chen0830.github.io/drainage/'},
+    srd:{label:'基地保水設計計算書',url:'https://yj-chen0830.github.io/site-retention-design/'},
+    trs:{label:'桁架分析計算書',url:'https://yj-chen0830.github.io/truss-analysis/'},
+    stc:{label:'鋼構接合計算書',url:'https://yj-chen0830.github.io/steel-connection/'},
+    wfc:{label:'堰流量計算書',url:'https://yj-chen0830.github.io/weir-flow-calculation/'},
+    hjc:{label:'水躍消能計算書',url:'https://yj-chen0830.github.io/hydraulic-jump-calculation/'},
+    dwd:{label:'懸臂式連續壁入土深度設計計算書',url:'https://yj-chen0830.github.io/diaphragm-wall-design/'},
+    esd:{label:'開挖支撐軸力與挫屈檢核計算書',url:'https://yj-chen0830.github.io/excavation-strut-design/'},
+    bsg:{label:'攔污柵與沉砂池設計計算書',url:'https://yj-chen0830.github.io/bar-screen-grit-chamber/'},
+    csd:{label:'混凝沉澱池設計計算書',url:'https://yj-chen0830.github.io/coagulation-sedimentation-design/'},
+    asd:{label:'廢水處理槽體設計計算書',url:'https://yj-chen0830.github.io/activated-sludge-design/'},
+    scd:{label:'二次沉澱池設計計算書',url:'https://yj-chen0830.github.io/secondary-clarifier-design/'},
+    cct:{label:'消毒接觸池設計計算書',url:'https://yj-chen0830.github.io/chlorine-contact-tank/'},
+    sla:{label:'土壤液化評估計算書',url:'https://yj-chen0830.github.io/soil-liquefaction-assessment/'},
+    spc:{label:'單樁承載力計算書（軸向＋橫向）',url:'https://yj-chen0830.github.io/single-pile-capacity/'}
+  };
+  var TOOL_RELATIONS={
+    adm:['rl','scr','tia'],rl:['adm'],scr:['adm'],tia:['adm'],
+    bsm:['rcb'],lc:['rcb'],rcb:['bsm','lc','rcd'],rcd:['rcb'],
+    pta:['dwt'],dwt:['pta'],
+    pgs:['stl'],stl:['pgs'],
+    ro:['dp','dr'],dp:['ro','srd'],dr:['ro'],srd:['dp'],
+    trs:['stc'],stc:['trs'],
+    wfc:['hjc'],hjc:['wfc'],
+    dwd:['esd'],esd:['dwd'],
+    bsg:['csd'],csd:['bsg','asd'],asd:['csd','scd'],scd:['asd','cct'],cct:['scd'],
+    sla:['spc'],spc:['sla']
+  };
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function render(){
+    var tool=(document.body&&document.body.dataset&&document.body.dataset.tool)||'';
+    var related=TOOL_RELATIONS[tool];
+    if(!related||!related.length)return;
+    if(document.getElementById('jrh-related-css'))return;
+    var css=document.createElement('style');
+    css.id='jrh-related-css';
+    css.textContent='.jrh-related{background:#f4f7f6;border:1.5px dashed #7a9b8e;border-radius:9px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#333;font-family:"Noto Sans TC","Segoe UI",sans-serif;}.jrh-related b{color:#0b1f3a;}.jrh-related .jrh-rel-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}.jrh-related a{display:inline-block;padding:5px 12px;border-radius:16px;background:#fff;border:1px solid #7a9b8e;color:#0b1f3a;text-decoration:none;font-size:12.5px;}.jrh-related a:hover{background:#7a9b8e;color:#fff;}@media print{.jrh-related{display:none!important;}}';
+    document.head.appendChild(css);
+    var links=related.map(function(code){
+      var info=TOOL_INFO[code];
+      if(!info)return '';
+      return '<a href="'+info.url+'" target="_blank" rel="noopener">'+esc(info.label)+'</a>';
+    }).join('');
+    if(!links)return;
+    var box=document.createElement('div');
+    box.className='jrh-related no-print';
+    box.innerHTML='<span>🔗 <b>相關工具</b>：此工具的計算結果可以直接帶入下列工具（或反過來），一起使用可以少打幾次重複的數字。</span><div class="jrh-rel-links">'+links+'</div>';
+    var host=document.querySelector('main')||document.body;
+    var target=document.querySelector('.grid')||document.querySelector('.card')||host.firstChild;
+    if(target&&target.parentElement)target.parentElement.insertBefore(box,target);
+    else host.insertBefore(box,host.firstChild);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render);
+  else render();
+})();
+
 /* ── 計算書示意圖共用元件（SVG）──
    各工具在算完之後呼叫 JRH.diagram.wrap(...) 組出的 HTML 字串，直接塞進自己
    的 result innerHTML 即可（會跟著印在畫面上與 PDF 裡，不需要另外處理）。
