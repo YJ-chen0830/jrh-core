@@ -244,6 +244,7 @@
       '<div id="jrh-acc-box" style="position:relative;">'+
         '<button id="jrh-acc-cl" aria-label="關閉">✕</button>'+
         '<h3>🏢 個人化 PDF 設定</h3>'+
+        '<div id="jrh-acc-scope-note"></div>'+
         '<label>計算書日期格式</label>'+
         '<select id="jrh-acc-datefmt" style="width:100%;padding:10px 12px;border:1.5px solid #ccc;border-radius:8px;font-size:14px;font-family:inherit;">'+
           '<option value="ad"'+(cached.dateFormat==='roc'?'':' selected')+'>西元（2026-07-24）</option>'+
@@ -291,6 +292,15 @@
         if(el&&c)el.textContent='目前點數餘額：'+c.balance+' 點'+(c.balance<BRANDING_COST?'（不足，可至工程計算中心首頁儲值）':'');
       }).catch(function(){});
     }
+    // This box now edits whatever /api/profile resolves to server-side —
+    // for a team member that's the team's shared settings, not a private
+    // copy — so surface that plainly rather than let someone discover it
+    // the hard way (edit something, and a teammate's PDF changes too).
+    window.JRH.cloudApi('/api/teams/me').then(function(r){
+      var el=document.getElementById('jrh-acc-scope-note');
+      if(!el||!r||!r.team)return;
+      el.innerHTML='<p class="desc" style="background:#fdf7ec;border:1px solid #e3c77e;border-radius:6px;padding:8px 10px;margin:-4px 0 10px;">👥 你目前在團隊「'+String(r.team.name).replace(/</g,'&lt;')+'」，這裡編輯的是<b>整個團隊共用</b>的設定，儲存後所有團隊成員的 PDF 都會跟著改變。</p>';
+    }).catch(function(){});
     var msg=document.getElementById('jrh-acc-msg');
     var pendingLogoFile=null,pendingSigFile=null;
     document.getElementById('jrh-acc-logo-file').addEventListener('change',function(e){
