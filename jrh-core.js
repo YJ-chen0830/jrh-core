@@ -118,6 +118,7 @@
   global.JRH.getProfileCached=getProfileCached;
   global.JRH.saveProfile=saveProfile;
   global.JRH.getCredits=getCredits;
+  global.JRH.cloudApi=api;
 })(window);
 
 /* ── 帳號 UI：登入/註冊燈箱 + 個人化設定面板 ──
@@ -361,6 +362,9 @@
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
   else setTimeout(init,300);
+
+  window.JRH=window.JRH||{};
+  window.JRH.showLoginBox=showLoginBox;
 })();
 
 /* ── 列印前強制展開所有計算過程 ── */
@@ -536,7 +540,12 @@ window.jrhPrint=function(docName){
     var docName=meta.doc||(window.__jrhDocName)||document.title.split('|')[0].trim();
     var rows=[
       ['工程地點',get('pj-loc')],['承造廠商',get('pj-contractor')],
-      ['文件編號',get('pj-docno')],['計算日期',get('pj-date')||today()]
+      ['文件編號',get('pj-docno')],['計算日期',get('pj-date')||today()],
+      // Opt-in: a tool sets window.jrhDocMeta.version (e.g. '1.2') when it
+      // wants calculations traceable to a specific formula revision — most
+      // tools don't set this yet, this just makes the plumbing exist for
+      // when they do, without requiring any change to tools that don't.
+      ['工具版本',meta.version?('v'+meta.version):'']
     ].filter(function(r){return r[1];});
     // Logged-in users with a saved profile get their own branding on the
     // cover page instead of the firm's default — this is the one place the
@@ -620,7 +629,26 @@ window.jrhPrint=function(docName){
   function getWf(){try{return JSON.parse(localStorage.getItem(WF))||{};}catch(e){return{};}}
   function setWf(o){localStorage.setItem(WF,JSON.stringify(o));}
 
-  /* 產出 PDF 時打卡：包裝 jrhPrint */
+  /* 產出 PDF 時打卡：包裝 jrhPrint，同時把完整結果面板存進 jrh_records
+     （跟 jrh_wf 只記錄「有沒有做」不同，這裡連結果本身都存下來，供
+     workflow.html 的合併報告／Excel／Word 匯出使用）。用 [id$="-result"] /
+     [id$="-proc-text"] 這種尾碼比對而非寫死特定 id，因為每個工具的 {{ID}}
+     前綴不同，但 template 保證這兩個尾碼一定存在。 */
+  var REC='jrh_records';
+  function getRec(){try{return JSON.parse(localStorage.getItem(REC))||{};}catch(e){return{};}}
+  function setRec(o){localStorage.setItem(REC,JSON.stringify(o));}
+  function captureRecord(){
+    var resultEl=document.querySelector('[id$="-result"]');
+    var procEl=document.querySelector('[id$="-proc-text"]');
+    var h1=document.querySelector('h1');
+    return {
+      title:(h1?h1.textContent:document.title).trim(),
+      resultHtml:resultEl?resultEl.innerHTML:'',
+      procText:procEl?procEl.textContent:'',
+      url:location.href.split('?')[0]
+    };
+  }
+
   var orig=window.jrhPrint;
   window.jrhPrint=function(docName){
     try{
@@ -631,8 +659,18 @@ window.jrhPrint=function(docName){
         var wf=getWf();
         if(!wf[proj])wf[proj]={};
         var d=new Date();
-        wf[proj][tool]={doc:docName||document.title,date:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+        var dateStr=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        wf[proj][tool]={doc:docName||document.title,date:dateStr};
         setWf(wf);
+
+        var rec=getRec();
+        if(!rec[proj])rec[proj]={};
+        var captured=captureRecord();
+        if(captured.resultHtml){
+          captured.date=dateStr;
+          rec[proj][tool]=captured;
+          setRec(rec);
+        }
       }
     }catch(e){}
     orig(docName);
@@ -669,6 +707,76 @@ window.jrhPrint=function(docName){
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addFabLink);
   else setTimeout(addFabLink,300);
+})();
+
+/* ── 專案雲端同步 ──
+   jrh_projects / jrh_wf / jrh_records 完全是瀏覽器 localStorage，換裝置、
+   清快取、多人協作都看不到彼此進度。這裡把三份資料依專案名稱打包，透過
+   既有的 GET/PUT /api/projects/:name（cloud-sync-mvp）同步——有登入團隊帳號
+   時後端會自動存進團隊共用空間，所有團隊成員都看得到；沒有團隊就是純個人
+   雲端備份。手動觸發（workflow.html 的「同步」按鈕），不做自動即時同步，
+   避免兩人同時離線編輯造成的覆蓋在使用者沒發現的情況下發生。 */
+(function(){
+  function localNames(){
+    var names={};
+    ['jrh_projects','jrh_wf','jrh_records'].forEach(function(key){
+      try{Object.keys(JSON.parse(localStorage.getItem(key))||{}).forEach(function(n){names[n]=1;});}catch(e){}
+    });
+    return Object.keys(names);
+  }
+  function bundleFor(name){
+    function pick(key){try{return (JSON.parse(localStorage.getItem(key))||{})[name]||{};}catch(e){return{};}}
+    return {fields:pick('jrh_projects'),wf:pick('jrh_wf'),records:pick('jrh_records')};
+  }
+  function applyBundle(name,bundle){
+    ['jrh_projects','jrh_wf','jrh_records'].forEach(function(key,i){
+      var part=[bundle.fields,bundle.wf,bundle.records][i]||{};
+      var all;try{all=JSON.parse(localStorage.getItem(key))||{};}catch(e){all={};}
+      all[name]=part;
+      localStorage.setItem(key,JSON.stringify(all));
+    });
+  }
+
+  function syncToCloud(onProgress){
+    if(!window.JRH||!window.JRH.isLoggedIn||!window.JRH.isLoggedIn()){
+      return Promise.reject(new Error('請先登入帳號才能同步到雲端'));
+    }
+    var names=localNames();
+    var done=0;
+    return names.reduce(function(chain,name){
+      return chain.then(function(){
+        return window.JRH.cloudApi('/api/projects/'+encodeURIComponent(name),{
+          method:'PUT',
+          body:JSON.stringify({data:bundleFor(name)})
+        }).then(function(){
+          done++;
+          if(onProgress)onProgress(done,names.length,name);
+        });
+      });
+    },Promise.resolve()).then(function(){return {count:names.length};});
+  }
+
+  function syncFromCloud(onProgress){
+    if(!window.JRH||!window.JRH.isLoggedIn||!window.JRH.isLoggedIn()){
+      return Promise.reject(new Error('請先登入帳號才能從雲端載入'));
+    }
+    return window.JRH.cloudApi('/api/projects').then(function(list){
+      var done=0;
+      return list.reduce(function(chain,item){
+        return chain.then(function(){
+          return window.JRH.cloudApi('/api/projects/'+encodeURIComponent(item.name)).then(function(full){
+            applyBundle(item.name,full.data||{});
+            done++;
+            if(onProgress)onProgress(done,list.length,item.name);
+          });
+        });
+      },Promise.resolve()).then(function(){return {count:list.length};});
+    });
+  }
+
+  window.JRH=window.JRH||{};
+  window.JRH.syncProjectsToCloud=syncToCloud;
+  window.JRH.syncProjectsFromCloud=syncFromCloud;
 })();
 
 /* ── 跨工具資料傳遞（組合技）──
