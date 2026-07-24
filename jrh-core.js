@@ -230,26 +230,53 @@
   }
 
   var BRANDING_COST=5;
+  var DEFAULT_SIG_ROLES=[{zh:'計算者',en:'Prepared by'},{zh:'審核者',en:'Checked by'},{zh:'核准者',en:'Approved by'}];
+  function h(s){return String(s==null?'':s).replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
   function showProfileBox(){
     injectStyles();
     var cached=window.JRH.getProfileCached()||{};
     var unlocked=!!cached.unlocked;
+    var sigRoles=(cached.signatureRoles&&cached.signatureRoles.length)?cached.signatureRoles:DEFAULT_SIG_ROLES;
     var ov=document.createElement('div');
     ov.id='jrh-acc-ov';
     ov.innerHTML=
       '<div id="jrh-acc-box" style="position:relative;">'+
         '<button id="jrh-acc-cl" aria-label="關閉">✕</button>'+
         '<h3>🏢 個人化 PDF 設定</h3>'+
+        '<label>計算書日期格式</label>'+
+        '<select id="jrh-acc-datefmt" style="width:100%;padding:10px 12px;border:1.5px solid #ccc;border-radius:8px;font-size:14px;font-family:inherit;">'+
+          '<option value="ad"'+(cached.dateFormat==='roc'?'':' selected')+'>西元（2026-07-24）</option>'+
+          '<option value="roc"'+(cached.dateFormat==='roc'?' selected':'')+'>民國（115-07-24）</option>'+
+        '</select>'+
+        '<p class="desc" style="margin-top:6px;">日期格式免費，登入即可設定，跟下方品牌設定是否解鎖無關。</p>'+
+        '<hr style="border:none;border-top:1px solid #eee;margin:16px 0;">'+
         '<p class="desc">'+(unlocked
-          ?'所有工具的 PDF 封面都會自動顯示你的公司名稱與 Logo（取代預設的事務所名稱），計算者/審核者也會自動帶入（可在各工具頁再個別調整）。'
-          :'解鎖後，所有工具的 PDF 封面會自動顯示你的公司名稱與 Logo（取代預設的「儒鴻結構」），計算者/審核者也會自動帶入。解鎖為一次性費用 '+BRANDING_COST+' 點，之後編輯不再收費。')+'</p>'+
+          ?'所有工具的 PDF 封面都會自動顯示你的公司名稱、Logo、執業證號與簽章（取代預設的事務所資訊），計算者/審核者也會自動帶入（可在各工具頁再個別調整）。'
+          :'解鎖後，所有工具的 PDF 封面會自動顯示你的公司名稱、Logo、執業證號與簽章（取代預設的「儒鴻結構」）。解鎖為一次性費用 '+BRANDING_COST+' 點，之後編輯不再收費。')+'</p>'+
         (unlocked?'':'<p class="desc" id="jrh-acc-balance" style="margin-top:-8px;">目前點數餘額：查詢中…</p>')+
-        '<label>公司/事務所名稱</label><input id="jrh-acc-company" type="text" maxlength="200" value="'+(cached.companyName?String(cached.companyName).replace(/"/g,'&quot;'):'')+'">'+
+        '<label>公司/事務所名稱</label><input id="jrh-acc-company" type="text" maxlength="200" value="'+h(cached.companyName)+'">'+
+        '<label>事務所登記字號（統編等）</label><input id="jrh-acc-firmreg" type="text" maxlength="50" value="'+h(cached.firmRegNumber)+'">'+
         '<label>Logo（建議寬版、簡潔圖形，會自動縮圖）</label>'+
         (cached.logoDataUrl?'<img id="jrh-acc-logo-preview" src="'+cached.logoDataUrl+'">':'')+
         '<input id="jrh-acc-logo-file" type="file" accept="image/*">'+
-        '<label>預設計算者</label><input id="jrh-acc-calc" type="text" maxlength="200" value="'+(cached.defaultCalculator?String(cached.defaultCalculator).replace(/"/g,'&quot;'):'')+'">'+
-        '<label>預設審核者</label><input id="jrh-acc-review" type="text" maxlength="200" value="'+(cached.defaultReviewer?String(cached.defaultReviewer).replace(/"/g,'&quot;'):'')+'">'+
+        '<label>預設計算者</label><input id="jrh-acc-calc" type="text" maxlength="200" value="'+h(cached.defaultCalculator)+'">'+
+        '<label>預設審核者</label><input id="jrh-acc-review" type="text" maxlength="200" value="'+h(cached.defaultReviewer)+'">'+
+        '<label>技師執業證號</label><input id="jrh-acc-license" type="text" maxlength="50" value="'+h(cached.licenseNumber)+'">'+
+        '<label>簽章圖片（會顯示在 PDF 簽署欄）</label>'+
+        (cached.signatureDataUrl?'<img id="jrh-acc-sig-preview" src="'+cached.signatureDataUrl+'">':'')+
+        '<input id="jrh-acc-sig-file" type="file" accept="image/*">'+
+        '<label>簽署欄位標題（預設「計算者/審核者/核准者」，可改成貴事務所的稱呼）</label>'+
+        '<div id="jrh-acc-sigroles" style="display:flex;flex-direction:column;gap:6px;">'+
+          sigRoles.map(function(r,i){
+            return '<div style="display:flex;gap:6px;">'+
+              '<input class="jrh-sigrole-zh" data-i="'+i+'" type="text" maxlength="20" placeholder="中文標題" value="'+h(r.zh)+'" style="flex:1;padding:8px 10px;border:1.5px solid #ccc;border-radius:7px;font-size:13px;">'+
+              '<input class="jrh-sigrole-en" data-i="'+i+'" type="text" maxlength="30" placeholder="英文標題" value="'+h(r.en)+'" style="flex:1;padding:8px 10px;border:1.5px solid #ccc;border-radius:7px;font-size:13px;">'+
+            '</div>';
+          }).join('')+
+        '</div>'+
+        '<label>自訂免責聲明附加文字（選填，會加在標準免責聲明之後，不會取代標準免責聲明）</label>'+
+        '<textarea id="jrh-acc-disclaimer" maxlength="1000" style="width:100%;min-height:60px;padding:10px 12px;border:1.5px solid #ccc;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;">'+h(cached.customDisclaimer)+'</textarea>'+
         '<div id="jrh-acc-msg"></div>'+
         '<button id="jrh-acc-ok">'+(unlocked?'儲存設定':'解鎖並儲存（扣 '+BRANDING_COST+' 點）')+'</button>'+
         '<div style="display:flex;justify-content:space-between;margin-top:12px;">'+
@@ -265,9 +292,12 @@
       }).catch(function(){});
     }
     var msg=document.getElementById('jrh-acc-msg');
-    var pendingLogoFile=null;
+    var pendingLogoFile=null,pendingSigFile=null;
     document.getElementById('jrh-acc-logo-file').addEventListener('change',function(e){
       pendingLogoFile=e.target.files&&e.target.files[0]||null;
+    });
+    document.getElementById('jrh-acc-sig-file').addEventListener('change',function(e){
+      pendingSigFile=e.target.files&&e.target.files[0]||null;
     });
     ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
     document.getElementById('jrh-acc-cl').addEventListener('click',function(){ov.remove();});
@@ -277,11 +307,12 @@
       updateAccBtn();
     });
     // Two-tap confirm instead of a native confirm() dialog, consistent with
-    // the rest of this UI. Scoped to only the three cross-tool project-chain
-    // keys (jrh_outputs/jrh_projects/jrh_wf) — deliberately leaves the
-    // current page's own typed-in field values, login state, and email-gate
-    // consent untouched, since clearing those would be a surprising side
-    // effect of a button labeled "clear project-chain data".
+    // the rest of this UI. Scoped to only the cross-tool project-chain keys
+    // (jrh_outputs/jrh_projects/jrh_wf/jrh_records/jrh_revisions) —
+    // deliberately leaves the current page's own typed-in field values,
+    // login state, and email-gate consent untouched, since clearing those
+    // would be a surprising side effect of a button labeled "clear
+    // project-chain data".
     var clearArmed=false;
     document.getElementById('jrh-acc-clear-local').addEventListener('click',function(e){
       if(!clearArmed){
@@ -293,20 +324,36 @@
       localStorage.removeItem('jrh_outputs');
       localStorage.removeItem('jrh_projects');
       localStorage.removeItem('jrh_wf');
+      localStorage.removeItem('jrh_records');
+      localStorage.removeItem('jrh_revisions');
       e.target.textContent='✔ 已清除';
       e.target.style.color='#1a6e35';
     });
     document.getElementById('jrh-acc-ok').addEventListener('click',function(){
       msg.style.color='#c00';
       msg.textContent='儲存中…';
-      fileToCompressedDataUrl(pendingLogoFile).then(function(logoDataUrl){
+      Promise.all([fileToCompressedDataUrl(pendingLogoFile),fileToCompressedDataUrl(pendingSigFile)]).then(function(files){
+        var logoDataUrl=files[0],sigDataUrl=files[1];
+        var roles=[];
+        document.querySelectorAll('.jrh-sigrole-zh').forEach(function(el,i){
+          var enEl=document.querySelectorAll('.jrh-sigrole-en')[i];
+          var zh=el.value.trim();
+          if(zh)roles.push({zh:zh,en:enEl?enEl.value.trim():''});
+        });
         var payload={
           companyName:document.getElementById('jrh-acc-company').value.trim(),
           defaultCalculator:document.getElementById('jrh-acc-calc').value.trim(),
           defaultReviewer:document.getElementById('jrh-acc-review').value.trim(),
+          licenseNumber:document.getElementById('jrh-acc-license').value.trim(),
+          firmRegNumber:document.getElementById('jrh-acc-firmreg').value.trim(),
+          customDisclaimer:document.getElementById('jrh-acc-disclaimer').value.trim(),
+          dateFormat:document.getElementById('jrh-acc-datefmt').value,
+          signatureRoles:roles.length?roles:null,
         };
         if(logoDataUrl)payload.logoDataUrl=logoDataUrl;
         else if(cached.logoDataUrl)payload.logoDataUrl=cached.logoDataUrl;
+        if(sigDataUrl)payload.signatureDataUrl=sigDataUrl;
+        else if(cached.signatureDataUrl)payload.signatureDataUrl=cached.signatureDataUrl;
         return window.JRH.saveProfile(payload);
       }).then(function(){
         msg.style.color='#1a6e35';
@@ -503,6 +550,19 @@ window.jrhPrint=function(docName){
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   function get(id){var el=document.getElementById(id);if(el)return el.value.trim();return (localStorage.getItem('jrh_proj_'+id)||'').trim();}
   function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  // Same defaults as the profile-settings box (separate closure, kept in
+  // sync by hand — both are three fixed {zh,en} label pairs).
+  var DEFAULT_SIG_ROLES=[{zh:'計算者',en:'Prepared by'},{zh:'審核者',en:'Checked by'},{zh:'核准者',en:'Approved by'}];
+  // 西元→民國 (year - 1911), only applied when the profile opts in — the
+  // stored pj-date value itself always stays AD (ISO date input), this only
+  // changes how it's displayed on the cover.
+  function formatDate(dateStr,profile){
+    if(!dateStr)return dateStr;
+    if(!profile||profile.dateFormat!=='roc')return dateStr;
+    var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if(!m)return dateStr;
+    return (Number(m[1])-1911)+'-'+m[2]+'-'+m[3];
+  }
 
   /* print-only CSS */
   var css=document.createElement('style');
@@ -514,7 +574,9 @@ window.jrhPrint=function(docName){
       '.print-sig{display:none!important;}'+
       '#jrh-cover{display:flex!important;flex-direction:column;height:255mm;page-break-after:always;font-family:"Noto Sans TC","Segoe UI",sans-serif;color:#111;}'+
       '#jrh-cover .jc-office{text-align:center;font-size:11pt;font-weight:700;color:#0b1f3a;letter-spacing:.35em;margin-top:18pt;}'+
+      '#jrh-cover .jc-firmreg{text-align:center;font-size:8pt;color:#888;letter-spacing:.1em;margin-top:3pt;}'+
       '#jrh-cover .jc-logo{display:block;max-height:32pt;max-width:180pt;margin:14pt auto 0;}'+
+      '#jrh-cover .jc-sig-img{max-height:26pt;max-width:70pt;}'+
       '#jrh-cover .jc-line{width:60%;margin:10pt auto 0;border-bottom:2pt solid #c9a14a;}'+
       '#jrh-cover .jc-mid{flex:1;display:flex;flex-direction:column;justify-content:center;text-align:center;}'+
       '#jrh-cover .jc-proj{font-size:20pt;font-weight:700;color:#0b1f3a;line-height:1.5;margin-bottom:10pt;}'+
@@ -538,23 +600,38 @@ window.jrhPrint=function(docName){
     if(!document.getElementById('pj-name')&&!(localStorage.getItem('jrh_proj_pj-name')||'').trim())return;
     var meta=window.jrhDocMeta||{};
     var docName=meta.doc||(window.__jrhDocName)||document.title.split('|')[0].trim();
+    // Logged-in users with a saved profile get their own branding on the
+    // cover page instead of the firm's default — this is the one place the
+    // free vs. logged-in-with-profile distinction actually shows up.
+    var profile=(window.JRH&&window.JRH.getProfileCached)?window.JRH.getProfileCached():null;
+    // Latest entry from workflow.html's revision log (jrh_revisions[專案]),
+    // an append-only audit trail — read directly from localStorage since
+    // it's project-scoped the same way jrh_proj_*/jrh_wf/jrh_records are.
+    var latestRev=null;
+    try{
+      var proj=get('pj-name');
+      var revs=proj&&(JSON.parse(localStorage.getItem('jrh_revisions')||'{}')[proj]);
+      if(revs&&revs.length)latestRev=revs[revs.length-1];
+    }catch(e){}
     var rows=[
       ['工程地點',get('pj-loc')],['承造廠商',get('pj-contractor')],
-      ['文件編號',get('pj-docno')],['計算日期',get('pj-date')||today()],
+      ['文件編號',get('pj-docno')],['計算日期',formatDate(get('pj-date')||today(),profile)],
+      ['修訂版次',latestRev?('Rev.'+latestRev.rev+'（'+formatDate(latestRev.date,profile)+'）'):''],
       // Opt-in: a tool sets window.jrhDocMeta.version (e.g. '1.2') when it
       // wants calculations traceable to a specific formula revision — most
       // tools don't set this yet, this just makes the plumbing exist for
       // when they do, without requiring any change to tools that don't.
       ['工具版本',meta.version?('v'+meta.version):'']
     ].filter(function(r){return r[1];});
-    // Logged-in users with a saved profile get their own branding on the
-    // cover page instead of the firm's default — this is the one place the
-    // free vs. logged-in-with-profile distinction actually shows up.
-    var profile=(window.JRH&&window.JRH.getProfileCached)?window.JRH.getProfileCached():null;
     var officeBlock=(profile&&profile.companyName)
       ? (profile.logoDataUrl?'<img class="jc-logo" src="'+profile.logoDataUrl+'">':'')+
-        '<div class="jc-office">'+esc(profile.companyName)+'</div>'
+        '<div class="jc-office">'+esc(profile.companyName)+'</div>'+
+        (profile.firmRegNumber?'<div class="jc-firmreg">登記字號：'+esc(profile.firmRegNumber)+'</div>':'')
       : '<div class="jc-office">儒鴻結構技師事務所</div>';
+    var sigRoles=(profile&&profile.signatureRoles&&profile.signatureRoles.length===3)?profile.signatureRoles:DEFAULT_SIG_ROLES;
+    var sigValues=[get('pj-calc'),get('pj-review'),''];
+    var licenseLine=(profile&&profile.licenseNumber)?'<br>證號 '+esc(profile.licenseNumber):'';
+    var sigImg=(profile&&profile.signatureDataUrl)?'<br><img class="jc-sig-img" src="'+profile.signatureDataUrl+'">':'';
     var cover=document.createElement('div');
     cover.id='jrh-cover';
     cover.innerHTML=
@@ -565,9 +642,12 @@ window.jrhPrint=function(docName){
         (rows.length?'<table>'+rows.map(function(r){return '<tr><th>'+r[0]+'</th><td>'+esc(r[1])+'</td></tr>';}).join('')+'</table>':'')+
       '</div>'+
       '<div class="jc-sig">'+
-        '<div>計算者 Prepared by'+(get('pj-calc')?'<br><br>'+esc(get('pj-calc')):'')+'</div>'+
-        '<div>審核者 Checked by'+(get('pj-review')?'<br><br>'+esc(get('pj-review')):'')+'</div>'+
-        '<div>核准者 Approved by</div>'+
+        sigRoles.map(function(role,i){
+          return '<div>'+esc(role.zh)+(role.en?' '+esc(role.en):'')+
+            (i===0?licenseLine+sigImg:'')+
+            (sigValues[i]?'<br><br>'+esc(sigValues[i]):'')+
+          '</div>';
+        }).join('')+
       '</div>';
     document.body.insertBefore(cover,document.body.firstChild);
   }
@@ -582,6 +662,11 @@ window.jrhPrint=function(docName){
     var meta=window.jrhDocMeta||{};
     var notes=(meta.notes&&meta.notes.length)?meta.notes.slice():[];
     notes.push(STANDARD_DISCLAIMER);
+    // Appended, never substituted — a firm can add to the standard
+    // disclaimer (e.g. citing which code edition they design to) but can't
+    // configure it away, same "locked" intent as STANDARD_DISCLAIMER itself.
+    var profile=(window.JRH&&window.JRH.getProfileCached)?window.JRH.getProfileCached():null;
+    if(profile&&profile.customDisclaimer)notes.push(profile.customDisclaimer);
     var d=document.createElement('div');
     d.id='jrh-notes';
     var h='<h4>📌 設計依據與一般事項</h4>';
