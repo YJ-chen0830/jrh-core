@@ -340,6 +340,17 @@
           var zh=el.value.trim();
           if(zh)roles.push({zh:zh,en:enEl?enEl.value.trim():''});
         });
+        // The three inputs are always pre-filled with the default labels
+        // for discoverability, so `roles` is never actually empty — without
+        // this check, every save (including someone who only touched the
+        // free date-format dropdown) would send a non-empty signatureRoles
+        // array and silently trip the paid-branding gate on the backend.
+        // Only treat it as an intentional customization when it differs
+        // from the defaults.
+        var rolesMatchDefault=roles.length===DEFAULT_SIG_ROLES.length&&roles.every(function(r,i){
+          return r.zh===DEFAULT_SIG_ROLES[i].zh&&r.en===DEFAULT_SIG_ROLES[i].en;
+        });
+        if(rolesMatchDefault)roles=[];
         var payload={
           companyName:document.getElementById('jrh-acc-company').value.trim(),
           defaultCalculator:document.getElementById('jrh-acc-calc').value.trim(),
@@ -643,8 +654,15 @@ window.jrhPrint=function(docName){
       '</div>'+
       '<div class="jc-sig">'+
         sigRoles.map(function(role,i){
+          // License number + signature image go on the LAST slot (核准者/
+          // Approved by, by default) rather than the first — in Taiwan
+          // engineering practice the licensed engineer's stamp is the final
+          // sign-off, not necessarily whoever did the初算. If a firm
+          // renames/reorders the three roles, this still tracks "last slot",
+          // which is the closest generic proxy for "final approver" without
+          // adding a separate "which slot is the license holder" setting.
           return '<div>'+esc(role.zh)+(role.en?' '+esc(role.en):'')+
-            (i===0?licenseLine+sigImg:'')+
+            (i===sigRoles.length-1?licenseLine+sigImg:'')+
             (sigValues[i]?'<br><br>'+esc(sigValues[i]):'')+
           '</div>';
         }).join('')+
