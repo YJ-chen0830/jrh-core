@@ -100,6 +100,13 @@
   function forgotPassword(email){
     return api('/api/auth/forgot-password',{method:'POST',body:JSON.stringify({email:email})});
   }
+  // Used by showProfileBox() to show the current balance before the user
+  // decides to unlock branding — not cached, this one's cheap enough (only
+  // called when the settings panel opens) to just always hit the network.
+  function getCredits(){
+    if(!isLoggedIn())return Promise.resolve(null);
+    return api('/api/credits');
+  }
 
   global.JRH=global.JRH||{};
   global.JRH.isLoggedIn=isLoggedIn;
@@ -110,6 +117,7 @@
   global.JRH.getProfile=getProfile;
   global.JRH.getProfileCached=getProfileCached;
   global.JRH.saveProfile=saveProfile;
+  global.JRH.getCredits=getCredits;
 })(window);
 
 /* ── 帳號 UI：登入/註冊燈箱 + 個人化設定面板 ──
@@ -220,16 +228,21 @@
     });
   }
 
+  var BRANDING_COST=5;
   function showProfileBox(){
     injectStyles();
     var cached=window.JRH.getProfileCached()||{};
+    var unlocked=!!cached.unlocked;
     var ov=document.createElement('div');
     ov.id='jrh-acc-ov';
     ov.innerHTML=
       '<div id="jrh-acc-box" style="position:relative;">'+
         '<button id="jrh-acc-cl" aria-label="關閉">✕</button>'+
         '<h3>🏢 個人化 PDF 設定</h3>'+
-        '<p class="desc">設定後，所有工具的 PDF 封面都會自動顯示你的公司名稱與 Logo（取代預設的事務所名稱），計算者/審核者也會自動帶入（可在各工具頁再個別調整）。</p>'+
+        '<p class="desc">'+(unlocked
+          ?'所有工具的 PDF 封面都會自動顯示你的公司名稱與 Logo（取代預設的事務所名稱），計算者/審核者也會自動帶入（可在各工具頁再個別調整）。'
+          :'解鎖後，所有工具的 PDF 封面會自動顯示你的公司名稱與 Logo（取代預設的「儒鴻結構」），計算者/審核者也會自動帶入。解鎖為一次性費用 '+BRANDING_COST+' 點，之後編輯不再收費。')+'</p>'+
+        (unlocked?'':'<p class="desc" id="jrh-acc-balance" style="margin-top:-8px;">目前點數餘額：查詢中…</p>')+
         '<label>公司/事務所名稱</label><input id="jrh-acc-company" type="text" maxlength="200" value="'+(cached.companyName?String(cached.companyName).replace(/"/g,'&quot;'):'')+'">'+
         '<label>Logo（建議寬版、簡潔圖形，會自動縮圖）</label>'+
         (cached.logoDataUrl?'<img id="jrh-acc-logo-preview" src="'+cached.logoDataUrl+'">':'')+
@@ -237,13 +250,19 @@
         '<label>預設計算者</label><input id="jrh-acc-calc" type="text" maxlength="200" value="'+(cached.defaultCalculator?String(cached.defaultCalculator).replace(/"/g,'&quot;'):'')+'">'+
         '<label>預設審核者</label><input id="jrh-acc-review" type="text" maxlength="200" value="'+(cached.defaultReviewer?String(cached.defaultReviewer).replace(/"/g,'&quot;'):'')+'">'+
         '<div id="jrh-acc-msg"></div>'+
-        '<button id="jrh-acc-ok">儲存設定</button>'+
+        '<button id="jrh-acc-ok">'+(unlocked?'儲存設定':'解鎖並儲存（扣 '+BRANDING_COST+' 點）')+'</button>'+
         '<div style="display:flex;justify-content:space-between;margin-top:12px;">'+
           '<span id="jrh-acc-clear-local" style="font-size:11.5px;color:#bbb;cursor:pointer;">清除本機專案串接資料</span>'+
           '<span id="jrh-acc-logout" style="margin-top:0;">登出</span>'+
         '</div>'+
       '</div>';
     document.body.appendChild(ov);
+    if(!unlocked){
+      window.JRH.getCredits().then(function(c){
+        var el=document.getElementById('jrh-acc-balance');
+        if(el&&c)el.textContent='目前點數餘額：'+c.balance+' 點'+(c.balance<BRANDING_COST?'（不足，可至工程計算中心首頁儲值）':'');
+      }).catch(function(){});
+    }
     var msg=document.getElementById('jrh-acc-msg');
     var pendingLogoFile=null;
     document.getElementById('jrh-acc-logo-file').addEventListener('change',function(e){
