@@ -560,6 +560,29 @@ window.jrhPrint=function(docName){
   window.addEventListener('beforeprint',function(){buildCover();buildNotes();});
 })();
 
+/* ── 畫面上常駐免責提示 ──
+   STANDARD_DISCLAIMER（上面 buildNotes()）只會出現在列印/PDF輸出裡，使用者
+   在螢幕上邊算邊看數字時完全看不到這行但書，直到真的按下列印才看得到。
+   在「產出計算書 PDF」按鈕旁補一行永遠可見的短版提示；列印時隱藏，避免
+   跟 buildNotes() 產生的完整版重複出現在 PDF 裡。 */
+(function(){
+  function inject(){
+    if(document.getElementById('jrh-inline-disclaimer'))return;
+    var btn=document.querySelector('.pro-btn');
+    if(!btn||!btn.parentNode)return;
+    var css=document.createElement('style');
+    css.textContent='@media print{#jrh-inline-disclaimer{display:none!important;}}';
+    document.head.appendChild(css);
+    var note=document.createElement('div');
+    note.id='jrh-inline-disclaimer';
+    note.style.cssText='font-size:11px;color:#8a8578;line-height:1.6;margin-top:8px;';
+    note.textContent='⚠️ 僅供初步估算與方案比較參考，不具技師簽證效力，正式送審應由專業技師複核。';
+    btn.parentNode.insertBefore(note,btn.nextSibling);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',inject);
+  else inject();
+})();
+
 /* ── 專案工作流 ──
    1. jrhPrint 產出 PDF 時自動記錄完成狀態（jrh_wf）
    2. 網址 ?proj=專案名 開啟時自動載入該專案
