@@ -576,7 +576,13 @@ window.jrhPrint=function(docName){
       var btn=this,t=btn.textContent;
       btn.disabled=true;btn.textContent='同步中…';
       window.JRH.syncProjectsToCloud(function(done,total){btn.textContent='同步中…('+done+'/'+total+')';})
-        .then(function(r){btn.textContent='✔ 已同步 '+r.count+' 筆';setTimeout(function(){btn.disabled=false;btn.textContent=t;},1800);})
+        .then(function(r){
+          btn.textContent='✔ 已同步 '+r.count+'/'+r.total+' 筆';
+          if(r.failed&&r.failed.length){
+            alert('以下專案這次沒有同步成功：\n'+r.failed.map(function(f){return '「'+f.name+'」：'+f.message;}).join('\n'));
+          }
+          setTimeout(function(){btn.disabled=false;btn.textContent=t;},1800);
+        })
         .catch(function(e){alert(e.message||'同步失敗');btn.disabled=false;btn.textContent=t;});
     });
     document.getElementById('jrh-proj-down').addEventListener('click',function(){
@@ -584,7 +590,14 @@ window.jrhPrint=function(docName){
       var btn=this,t=btn.textContent;
       btn.disabled=true;btn.textContent='載入中…';
       window.JRH.syncProjectsFromCloud(function(done,total){btn.textContent='載入中…('+done+'/'+total+')';})
-        .then(function(r){btn.textContent='✔ 已載入 '+r.count+' 筆';refresh();setTimeout(function(){btn.disabled=false;btn.textContent=t;},1800);})
+        .then(function(r){
+          btn.textContent='✔ 已載入 '+r.count+'/'+r.total+' 筆';
+          refresh();
+          if(r.failed&&r.failed.length){
+            alert('以下專案這次沒有載入成功：\n'+r.failed.map(function(f){return '「'+f.name+'」：'+f.message;}).join('\n'));
+          }
+          setTimeout(function(){btn.disabled=false;btn.textContent=t;},1800);
+        })
         .catch(function(e){alert(e.message||'載入失敗');btn.disabled=false;btn.textContent=t;});
     });
   }
@@ -886,23 +899,47 @@ window.jrhPrint=function(docName){
     });
   }
 
+  // Tracks the cloud updated_at we last saw for each project by name, so
+  // syncToCloud can send it back as baseUpdatedAt (see projects.js's
+  // optimistic-lock check) — without this, every push would look like "no
+  // known prior version" and the lock could never actually catch a real
+  // conflict between two devices.
+  var VER_KEY='jrh_project_sync_versions';
+  function getVersions(){try{return JSON.parse(localStorage.getItem(VER_KEY))||{};}catch(e){return{};}}
+  function setVersion(name,updatedAt){
+    if(!updatedAt)return;
+    var v=getVersions();v[name]=updatedAt;localStorage.setItem(VER_KEY,JSON.stringify(v));
+  }
+
   function syncToCloud(onProgress){
     if(!window.JRH||!window.JRH.isLoggedIn||!window.JRH.isLoggedIn()){
       return Promise.reject(new Error('請先登入帳號才能同步到雲端'));
     }
     var names=localNames();
-    var done=0;
+    var versions=getVersions();
+    var done=0,succeeded=[],failed=[];
+    // Each project syncs independently now — previously the first failure
+    // (network blip, or a 409 version conflict from another device) aborted
+    // every remaining project with no report of which ones actually made
+    // it, silently losing progress the user had no way to know about.
     return names.reduce(function(chain,name){
       return chain.then(function(){
         return window.JRH.cloudApi('/api/projects/'+encodeURIComponent(name),{
           method:'PUT',
-          body:JSON.stringify({data:bundleFor(name)})
+          body:JSON.stringify({data:bundleFor(name),baseUpdatedAt:versions[name]||null})
+        }).then(function(resp){
+          if(resp&&resp.updated_at)setVersion(name,resp.updated_at);
+          succeeded.push(name);
+        }).catch(function(e){
+          failed.push({name:name,message:(e&&e.message)||'同步失敗'});
         }).then(function(){
           done++;
           if(onProgress)onProgress(done,names.length,name);
         });
       });
-    },Promise.resolve()).then(function(){return {count:names.length};});
+    },Promise.resolve()).then(function(){
+      return {count:succeeded.length,total:names.length,succeeded:succeeded,failed:failed};
+    });
   }
 
   function syncFromCloud(onProgress){
@@ -910,16 +947,23 @@ window.jrhPrint=function(docName){
       return Promise.reject(new Error('請先登入帳號才能從雲端載入'));
     }
     return window.JRH.cloudApi('/api/projects').then(function(list){
-      var done=0;
+      var done=0,succeeded=[],failed=[];
       return list.reduce(function(chain,item){
         return chain.then(function(){
           return window.JRH.cloudApi('/api/projects/'+encodeURIComponent(item.name)).then(function(full){
             applyBundle(item.name,full.data||{});
+            setVersion(item.name,full.updated_at);
+            succeeded.push(item.name);
+          }).catch(function(e){
+            failed.push({name:item.name,message:(e&&e.message)||'載入失敗'});
+          }).then(function(){
             done++;
             if(onProgress)onProgress(done,list.length,item.name);
           });
         });
-      },Promise.resolve()).then(function(){return {count:list.length};});
+      },Promise.resolve()).then(function(){
+        return {count:succeeded.length,total:list.length,succeeded:succeeded,failed:failed};
+      });
     });
   }
 
