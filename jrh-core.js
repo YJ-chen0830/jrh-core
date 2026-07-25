@@ -536,7 +536,9 @@ window.jrhPrint=function(docName){
     bar.innerHTML=
       '<select id="jrh-proj-sel" style="flex:1;min-width:150px;width:auto;padding:8px 10px;border:1.5px solid #d8d2c2;border-radius:7px;font-size:13px;background:#fafaf8;margin:0;"></select>'+
       '<button type="button" id="jrh-proj-save" style="margin:0;width:auto;padding:8px 14px;font-size:12.5px;font-weight:700;border:none;border-radius:7px;background:#0b1f3a;color:#fff;cursor:pointer;">💾 儲存專案</button>'+
-      '<button type="button" id="jrh-proj-del" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1px solid #c0392b;border-radius:7px;background:#fff;color:#c0392b;cursor:pointer;">刪除</button>';
+      '<button type="button" id="jrh-proj-del" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1px solid #c0392b;border-radius:7px;background:#fff;color:#c0392b;cursor:pointer;">刪除</button>'+
+      '<button type="button" id="jrh-proj-up" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1.5px solid #0b1f3a;border-radius:7px;background:#fff;color:#0b1f3a;cursor:pointer;">☁️ 同步到雲端</button>'+
+      '<button type="button" id="jrh-proj-down" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1.5px solid #0b1f3a;border-radius:7px;background:#fff;color:#0b1f3a;cursor:pointer;">⬇ 從雲端載入</button>';
     var h3=sec.querySelector('h3');
     if(h3&&h3.nextSibling) sec.insertBefore(bar,h3.nextSibling);
     else sec.insertBefore(bar,sec.firstChild);
@@ -566,6 +568,24 @@ window.jrhPrint=function(docName){
       if(!sel.value){alert('請先從下拉選單選擇要刪除的專案。');return;}
       if(!confirm('確定刪除專案「'+sel.value+'」的已存資料？（不影響目前表單內容）'))return;
       var all=getAll();delete all[sel.value];setAll(all);refresh();
+    });
+    // 本工具頁跟「專案工作流」頁分屬不同網域，儲存專案只會存在本工具的
+    // 瀏覽器 localStorage，不會自動出現在工作流頁的合併列印/匯出裡——
+    // 要跨網域帶過去，必須登入帳號，用下面兩顆按鈕手動同步到雲端。
+    document.getElementById('jrh-proj-up').addEventListener('click',function(){
+      var btn=this,t=btn.textContent;
+      btn.disabled=true;btn.textContent='同步中…';
+      window.JRH.syncProjectsToCloud(function(done,total){btn.textContent='同步中…('+done+'/'+total+')';})
+        .then(function(r){btn.textContent='✔ 已同步 '+r.count+' 筆';setTimeout(function(){btn.disabled=false;btn.textContent=t;},1800);})
+        .catch(function(e){alert(e.message||'同步失敗');btn.disabled=false;btn.textContent=t;});
+    });
+    document.getElementById('jrh-proj-down').addEventListener('click',function(){
+      if(!confirm('從雲端載入會覆蓋本機同名專案的資料，確定繼續嗎？'))return;
+      var btn=this,t=btn.textContent;
+      btn.disabled=true;btn.textContent='載入中…';
+      window.JRH.syncProjectsFromCloud(function(done,total){btn.textContent='載入中…('+done+'/'+total+')';})
+        .then(function(r){btn.textContent='✔ 已載入 '+r.count+' 筆';refresh();setTimeout(function(){btn.disabled=false;btn.textContent=t;},1800);})
+        .catch(function(e){alert(e.message||'載入失敗');btn.disabled=false;btn.textContent=t;});
     });
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);
