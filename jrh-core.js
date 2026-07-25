@@ -225,6 +225,13 @@
         ov.remove();
         applyProfileDefaults();
         updateAccBtn();
+        // Pages like workflow.html render their own login-state-dependent
+        // UI (team card, sync buttons) on load, using window.JRH.isLoggedIn()
+        // at that moment — nothing tells them login state just changed
+        // without this, so that UI silently stays stuck on "not logged in"
+        // until the next full page reload even though the FAB button itself
+        // already updated correctly via updateAccBtn() above.
+        window.dispatchEvent(new CustomEvent('jrh:login'));
       }).catch(function(e){msg.textContent=e.message||'登入失敗，請確認帳號密碼。';});
     });
   }
@@ -315,6 +322,7 @@
       window.JRH.cloudLogout();
       ov.remove();
       updateAccBtn();
+      window.dispatchEvent(new CustomEvent('jrh:logout'));
     });
     // Two-tap confirm instead of a native confirm() dialog, consistent with
     // the rest of this UI. Scoped to only the cross-tool project-chain keys
