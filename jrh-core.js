@@ -851,27 +851,35 @@ window.jrhPrint=function(docName){
 })();
 
 /* ── 專案雲端同步 ──
-   jrh_projects / jrh_wf / jrh_records 完全是瀏覽器 localStorage，換裝置、
-   清快取、多人協作都看不到彼此進度。這裡把三份資料依專案名稱打包，透過
-   既有的 GET/PUT /api/projects/:name（cloud-sync-mvp）同步——有登入團隊帳號
-   時後端會自動存進團隊共用空間，所有團隊成員都看得到；沒有團隊就是純個人
-   雲端備份。手動觸發（workflow.html 的「同步」按鈕），不做自動即時同步，
-   避免兩人同時離線編輯造成的覆蓋在使用者沒發現的情況下發生。 */
+   jrh_projects / jrh_wf / jrh_records / jrh_revisions 完全是瀏覽器
+   localStorage，換裝置、清快取、多人協作都看不到彼此進度；而且 104 個
+   工具頁跟 workflow.html 分屬不同網域，就算不換裝置，本機儲存也不會
+   互通（jrh_revisions 原本沒被包進這份同步，導致 workflow.html 加的修訂
+   履歷永遠不會出現在任何工具頁的 PDF 封面上——已修正，見這輪修正記錄）。
+   這裡把四份資料依專案名稱打包，透過既有的 GET/PUT /api/projects/:name
+   （cloud-sync-mvp）同步——有登入團隊帳號時後端會自動存進團隊共用空間，
+   所有團隊成員都看得到；沒有團隊就是純個人雲端備份。手動觸發（工具頁
+   /workflow.html 的「同步」按鈕），不做自動即時同步，避免兩人同時離線
+   編輯造成的覆蓋在使用者沒發現的情況下發生。 */
 (function(){
   function localNames(){
     var names={};
-    ['jrh_projects','jrh_wf','jrh_records'].forEach(function(key){
+    ['jrh_projects','jrh_wf','jrh_records','jrh_revisions'].forEach(function(key){
       try{Object.keys(JSON.parse(localStorage.getItem(key))||{}).forEach(function(n){names[n]=1;});}catch(e){}
     });
     return Object.keys(names);
   }
   function bundleFor(name){
-    function pick(key){try{return (JSON.parse(localStorage.getItem(key))||{})[name]||{};}catch(e){return{};}}
-    return {fields:pick('jrh_projects'),wf:pick('jrh_wf'),records:pick('jrh_records')};
+    // revisions 存的是陣列（append-only 稽核軌跡），不是物件，找不到時要
+    // 給 [] 不能給 {}，不然 applyBundle 寫回去會把陣列型別弄壞。
+    function pick(key,dfl){try{var v=(JSON.parse(localStorage.getItem(key))||{})[name];return v===undefined?dfl:v;}catch(e){return dfl;}}
+    return {fields:pick('jrh_projects',{}),wf:pick('jrh_wf',{}),records:pick('jrh_records',{}),revisions:pick('jrh_revisions',[])};
   }
   function applyBundle(name,bundle){
-    ['jrh_projects','jrh_wf','jrh_records'].forEach(function(key,i){
-      var part=[bundle.fields,bundle.wf,bundle.records][i]||{};
+    ['jrh_projects','jrh_wf','jrh_records','jrh_revisions'].forEach(function(key,i){
+      var dfl=key==='jrh_revisions'?[]:{};
+      var part=[bundle.fields,bundle.wf,bundle.records,bundle.revisions][i];
+      if(part===undefined)part=dfl;
       var all;try{all=JSON.parse(localStorage.getItem(key))||{};}catch(e){all={};}
       all[name]=part;
       localStorage.setItem(key,JSON.stringify(all));
