@@ -72,6 +72,15 @@
   function logout(){
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(PROFILE_CACHE_KEY);
+    // Centralized here (rather than left to each caller to remember) because
+    // api() also calls this same logout() on any 401 — a silently-expired
+    // token used to clear storage but leave the FAB still reading "我的帳號"
+    // and workflow.html's team card still showing a logged-in state, until
+    // the user happened to reload the page. The explicit logout button
+    // used to do both these steps itself right after calling this function;
+    // now it doesn't need to.
+    updateAccBtn();
+    window.dispatchEvent(new CustomEvent('jrh:logout'));
   }
 
   // buildCover() runs synchronously on the 'beforeprint' event, so it can't
@@ -321,8 +330,6 @@
     document.getElementById('jrh-acc-logout').addEventListener('click',function(){
       window.JRH.cloudLogout();
       ov.remove();
-      updateAccBtn();
-      window.dispatchEvent(new CustomEvent('jrh:logout'));
     });
     // Two-tap confirm instead of a native confirm() dialog, consistent with
     // the rest of this UI. Scoped to only the cross-tool project-chain keys
