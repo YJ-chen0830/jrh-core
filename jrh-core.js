@@ -72,14 +72,15 @@
   function logout(){
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(PROFILE_CACHE_KEY);
-    // Centralized here (rather than left to each caller to remember) because
+    // Dispatched here (rather than left to each caller to remember) because
     // api() also calls this same logout() on any 401 — a silently-expired
     // token used to clear storage but leave the FAB still reading "我的帳號"
     // and workflow.html's team card still showing a logged-in state, until
-    // the user happened to reload the page. The explicit logout button
-    // used to do both these steps itself right after calling this function;
-    // now it doesn't need to.
-    updateAccBtn();
+    // the user happened to reload the page. updateAccBtn() itself lives in
+    // a later, separate IIFE in this file (not reachable from here directly
+    // — confirmed by an actual ReferenceError when this was first tried),
+    // so this stays a plain event dispatch; that other module listens for
+    // 'jrh:logout' itself to update its own UI.
     window.dispatchEvent(new CustomEvent('jrh:logout'));
   }
 
@@ -432,6 +433,11 @@
     if(!btn)return;
     btn.textContent=window.JRH.isLoggedIn()?'👤 我的帳號':'👤 帳號登入';
   }
+  // logout() (a different IIFE, earlier in this file) dispatches this on
+  // both explicit logout and any 401-triggered auto-logout from api() — it
+  // can't call updateAccBtn() directly (not in its lexical scope), so this
+  // module reacts to the event instead of being called into.
+  window.addEventListener('jrh:logout',updateAccBtn);
 
   function addAccFabLink(){
     var fab=document.getElementById('jrh-fab');
