@@ -576,7 +576,19 @@ document.addEventListener('paste', function(e){
       var v=localStorage.getItem(keyFor(el));
       if(v===null && el.id.indexOf('pj-')===0) v=localStorage.getItem(pfx+el.id); /* 舊資料遷移 */
       if(v!==null) el.value=v;
-      function save(){localStorage.setItem(keyFor(el),el.value);}
+      // Safari private mode caps localStorage at ~0 usable bytes and throws
+      // QuotaExceededError on every setItem; a full quota (any browser) does
+      // the same. Without this, every single keystroke would throw here.
+      function save(){
+        try{localStorage.setItem(keyFor(el),el.value);}
+        catch(e){
+          if(!window.__jrhQuotaWarned){
+            window.__jrhQuotaWarned=true;
+            console.error('jrh-core autosave: localStorage.setItem failed',e);
+            alert('目前瀏覽器無法自動儲存輸入內容（可能是無痕模式或儲存空間已滿），請留意畫面重整或關閉分頁後資料可能遺失。');
+          }
+        }
+      }
       el.addEventListener('input',save);
       el.addEventListener('change',save);
     });
@@ -852,7 +864,15 @@ window.jrhPrint=function(docName){
     else (document.querySelector('main')||document.body).appendChild(d);
   }
 
-  window.addEventListener('beforeprint',function(){buildCover();buildNotes();});
+  // Any unexpected data shape (malformed profile, corrupted localStorage,
+  // etc.) throwing here would previously abort the print job entirely —
+  // buildCover()/buildNotes() only ever add a nicer cover/notes page, so a
+  // failure in either should degrade to "print without them" rather than
+  // block printing altogether.
+  window.addEventListener('beforeprint',function(){
+    try{buildCover();}catch(e){console.error('buildCover failed',e);}
+    try{buildNotes();}catch(e){console.error('buildNotes failed',e);}
+  });
 })();
 
 /* ── 畫面上常駐免責提示 ──
@@ -938,7 +958,11 @@ window.jrhPrint=function(docName){
   function autoLoad(){
     var m=location.search.match(/[?&]proj=([^&]+)/);
     if(!m)return;
-    var name=decodeURIComponent(m[1].replace(/\+/g,' '));
+    // A malformed %-escape (e.g. a lone "%" from a hand-edited/truncated
+    // URL) throws URIError here — previously unguarded, unlike the
+    // JSON.parse right below it which already had its own try/catch.
+    var name;
+    try{name=decodeURIComponent(m[1].replace(/\+/g,' '));}catch(e){return;}
     var all;try{all=JSON.parse(localStorage.getItem('jrh_projects'))||{};}catch(e){return;}
     var proj=all[name];
     if(!proj)return;
