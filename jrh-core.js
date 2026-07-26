@@ -69,6 +69,16 @@
     return api('/api/auth/login',{method:'POST',body:JSON.stringify({email:email,password:password})})
       .then(function(r){localStorage.setItem(TOKEN_KEY,r.token);return r;});
   }
+  // Same backend endpoint index.html's Google button already posts to.
+  // Before this, an account created via Google on the hub had no
+  // password_hash at all and this login box only ever offered email+
+  // password — meaning that account had no way to sign into workflow.html
+  // or any of the 104 tool pages (and forgot-password deliberately no-ops
+  // for password-less OAuth accounts, so that wasn't a way out either).
+  function googleLogin(idToken){
+    return api('/api/auth/google',{method:'POST',body:JSON.stringify({idToken:idToken})})
+      .then(function(r){localStorage.setItem(TOKEN_KEY,r.token);return r;});
+  }
   function logout(){
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(PROFILE_CACHE_KEY);
@@ -122,6 +132,7 @@
   global.JRH.isLoggedIn=isLoggedIn;
   global.JRH.cloudSignup=signup;
   global.JRH.cloudLogin=login;
+  global.JRH.cloudGoogleLogin=googleLogin;
   global.JRH.cloudLogout=logout;
   global.JRH.forgotPassword=forgotPassword;
   global.JRH.getProfile=getProfile;
@@ -136,6 +147,29 @@
    /審核者設定面板。存檔後同步更新 profile cache，並嘗試把預設計算者/審核者帶入目前頁面
    的 pj-calc / pj-review 欄位（只在使用者自己還沒填過時才帶入，不覆蓋既有輸入）。 */
 (function(){
+  var GOOGLE_CLIENT_ID='404538232688-uo6nro1a53aqougja3dprjvj4msodigm.apps.googleusercontent.com';
+  // Same OAuth client as engineering-hub's index.html. Unlike index.html,
+  // none of the 104 tool pages (or workflow.html) load Google's GSI script
+  // in their own <head> — it has to be injected here on demand, once, the
+  // first time this login box actually needs it.
+  var gsiLoading=null;
+  function ensureGsiLoaded(){
+    if(typeof google!=='undefined'&&google.accounts)return Promise.resolve();
+    if(gsiLoading)return gsiLoading;
+    gsiLoading=new Promise(function(resolve,reject){
+      var existing=document.querySelector('script[src*="accounts.google.com/gsi/client"]');
+      if(existing){existing.addEventListener('load',function(){resolve();});return;}
+      var s=document.createElement('script');
+      s.src='https://accounts.google.com/gsi/client?hl=zh-TW';
+      s.async=true;
+      s.defer=true;
+      s.onload=function(){resolve();};
+      s.onerror=function(){reject(new Error('Google 登入元件載入失敗'));};
+      document.head.appendChild(s);
+    });
+    return gsiLoading;
+  }
+
   function injectStyles(){
     if(document.getElementById('jrh-acc-css'))return;
     var s=document.createElement('style');
@@ -191,6 +225,8 @@
         '<button id="jrh-acc-cl" aria-label="關閉">✕</button>'+
         '<h3>👤 帳號登入</h3>'+
         '<p class="desc">跟工程計算中心首頁是同一組帳號。登入後可以在所有工具的 PDF 封面自動帶入你自己的公司名稱與 Logo，不用每次重填。</p>'+
+        '<div id="jrh-acc-google-btn" style="min-height:40px;"></div>'+
+        '<div style="text-align:center;font-size:11.5px;color:#999;margin:12px 0;">或使用 email</div>'+
         '<div id="jrh-acc-tabs"><button type="button" class="jrh-acc-tab sel" data-t="login">登入</button><button type="button" class="jrh-acc-tab" data-t="signup">註冊新帳號</button></div>'+
         '<label>Email</label><input id="jrh-acc-email" type="email" autocomplete="email">'+
         '<label>密碼</label><input id="jrh-acc-pass" type="password" autocomplete="current-password">'+
@@ -201,6 +237,45 @@
     document.body.appendChild(ov);
     var mode='login';
     var msg=document.getElementById('jrh-acc-msg');
+
+    // Shared by both the email/password submit button and the Google
+    // credential callback below — previously only existed inline in the
+    // email/password handler, with no way for a Google sign-in to reach it.
+    function onAuthSuccess(){
+      return window.JRH.getProfile().then(function(){
+        ov.remove();
+        applyProfileDefaults();
+        updateAccBtn();
+        // Pages like workflow.html render their own login-state-dependent
+        // UI (team card, sync buttons) on load, using window.JRH.isLoggedIn()
+        // at that moment — nothing tells them login state just changed
+        // without this, so that UI silently stays stuck on "not logged in"
+        // until the next full page reload even though the FAB button itself
+        // already updated correctly via updateAccBtn() above.
+        window.dispatchEvent(new CustomEvent('jrh:login'));
+      });
+    }
+
+    if(GOOGLE_CLIENT_ID){
+      ensureGsiLoaded().then(function(){
+        var container=document.getElementById('jrh-acc-google-btn');
+        if(!container)return; // modal already closed before this resolved
+        google.accounts.id.initialize({
+          client_id:GOOGLE_CLIENT_ID,
+          callback:function(response){
+            window.JRH.cloudGoogleLogin(response.credential).then(onAuthSuccess).catch(function(e){
+              msg.textContent=e.message||'Google 登入失敗，請稍後再試。';
+            });
+          }
+        });
+        google.accounts.id.renderButton(container,{type:'standard',theme:'outline',size:'large',width:300,text:'continue_with',logo_alignment:'center'});
+      }).catch(function(){
+        // GSI failed to load (network/ad-block) — email/password below still
+        // works, so just leave the button container empty rather than
+        // blocking the whole modal on it.
+      });
+    }
+
     document.querySelectorAll('.jrh-acc-tab').forEach(function(b){
       b.addEventListener('click',function(){
         document.querySelectorAll('.jrh-acc-tab').forEach(function(x){x.classList.remove('sel');});
@@ -229,20 +304,7 @@
       var pass=document.getElementById('jrh-acc-pass').value;
       if(!email||!pass){msg.textContent='請輸入 Email 與密碼。';return;}
       var action=mode==='login'?window.JRH.cloudLogin:window.JRH.cloudSignup;
-      action(email,pass).then(function(){
-        return window.JRH.getProfile();
-      }).then(function(){
-        ov.remove();
-        applyProfileDefaults();
-        updateAccBtn();
-        // Pages like workflow.html render their own login-state-dependent
-        // UI (team card, sync buttons) on load, using window.JRH.isLoggedIn()
-        // at that moment — nothing tells them login state just changed
-        // without this, so that UI silently stays stuck on "not logged in"
-        // until the next full page reload even though the FAB button itself
-        // already updated correctly via updateAccBtn() above.
-        window.dispatchEvent(new CustomEvent('jrh:login'));
-      }).catch(function(e){msg.textContent=e.message||'登入失敗，請確認帳號密碼。';});
+      action(email,pass).then(onAuthSuccess).catch(function(e){msg.textContent=e.message||'登入失敗，請確認帳號密碼。';});
     });
   }
 
