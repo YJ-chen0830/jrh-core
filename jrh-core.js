@@ -276,13 +276,13 @@
         '<label>公司/事務所名稱</label><input id="jrh-acc-company" type="text" maxlength="200" value="'+h(cached.companyName)+'">'+
         '<label>事務所登記字號（統編等）</label><input id="jrh-acc-firmreg" type="text" maxlength="50" value="'+h(cached.firmRegNumber)+'">'+
         '<label>Logo（建議寬版、簡潔圖形，會自動縮圖）</label>'+
-        (cached.logoDataUrl?'<img id="jrh-acc-logo-preview" src="'+cached.logoDataUrl+'">':'')+
+        (cached.logoDataUrl?'<img id="jrh-acc-logo-preview" src="'+h(cached.logoDataUrl)+'">':'')+
         '<input id="jrh-acc-logo-file" type="file" accept="image/*">'+
         '<label>預設計算者</label><input id="jrh-acc-calc" type="text" maxlength="200" value="'+h(cached.defaultCalculator)+'">'+
         '<label>預設審核者</label><input id="jrh-acc-review" type="text" maxlength="200" value="'+h(cached.defaultReviewer)+'">'+
         '<label>技師執業證號</label><input id="jrh-acc-license" type="text" maxlength="50" value="'+h(cached.licenseNumber)+'">'+
         '<label>簽章圖片（會顯示在 PDF 簽署欄）</label>'+
-        (cached.signatureDataUrl?'<img id="jrh-acc-sig-preview" src="'+cached.signatureDataUrl+'">':'')+
+        (cached.signatureDataUrl?'<img id="jrh-acc-sig-preview" src="'+h(cached.signatureDataUrl)+'">':'')+
         '<input id="jrh-acc-sig-file" type="file" accept="image/*">'+
         '<label>簽署欄位標題（預設「計算者/審核者/核准者」，可改成貴事務所的稱呼）</label>'+
         '<div id="jrh-acc-sigroles" style="display:flex;flex-direction:column;gap:6px;">'+
@@ -566,10 +566,15 @@ window.jrhPrint=function(docName){
     if(h3&&h3.nextSibling) sec.insertBefore(bar,h3.nextSibling);
     else sec.insertBefore(bar,sec.firstChild);
     var sel=document.getElementById('jrh-proj-sel');
+    // Project names are free-text user input rendered via innerHTML — the
+    // value attribute was quote-escaped but the option's text content
+    // wasn't, so a name containing e.g. </option><script> could break out
+    // of the <option> and inject markup into the select's parent.
+    function escOption(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
     function refresh(keep){
       var all=getAll(),names=Object.keys(all).sort();
       sel.innerHTML='<option value="">── 切換已存專案 ──</option>'+
-        names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
+        names.map(function(n){return '<option value="'+escOption(n)+'">'+escOption(n)+'</option>';}).join('');
       if(keep&&all[keep])sel.value=keep;
     }
     refresh();
@@ -633,6 +638,11 @@ window.jrhPrint=function(docName){
    列印時自動產生封面（需有 pj-name 欄位）與規範/一般事項頁。 */
 (function(){
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  // esc() doesn't escape quotes, so it's not safe for src="..."/other quoted
+  // attribute values (only for text content) — logoDataUrl/signatureDataUrl
+  // are profile fields shared across a team and settable via the API, so a
+  // value containing a '"' could break out of the attribute here.
+  function escAttr(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');}
   function get(id){var el=document.getElementById(id);if(el)return el.value.trim();return (localStorage.getItem('jrh_proj_'+id)||'').trim();}
   function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
   // Same defaults as the profile-settings box (separate closure, kept in
@@ -709,7 +719,7 @@ window.jrhPrint=function(docName){
       ['工具版本',meta.version?('v'+meta.version):'']
     ].filter(function(r){return r[1];});
     var officeBlock=(profile&&profile.companyName)
-      ? (profile.logoDataUrl?'<img class="jc-logo" src="'+profile.logoDataUrl+'">':'')+
+      ? (profile.logoDataUrl?'<img class="jc-logo" src="'+escAttr(profile.logoDataUrl)+'">':'')+
         '<div class="jc-office">'+esc(profile.companyName)+'</div>'+
         (profile.firmRegNumber?'<div class="jc-firmreg">登記字號：'+esc(profile.firmRegNumber)+'</div>':'')
       : '<div class="jc-office">儒鴻結構技師事務所</div>';
@@ -725,7 +735,7 @@ window.jrhPrint=function(docName){
     });
     var sigValues=[get('pj-calc'),get('pj-review'),''];
     var licenseLine=(profile&&profile.licenseNumber)?'<br>證號 '+esc(profile.licenseNumber):'';
-    var sigImg=(profile&&profile.signatureDataUrl)?'<br><img class="jc-sig-img" src="'+profile.signatureDataUrl+'">':'';
+    var sigImg=(profile&&profile.signatureDataUrl)?'<br><img class="jc-sig-img" src="'+escAttr(profile.signatureDataUrl)+'">':'';
     var cover=document.createElement('div');
     cover.id='jrh-cover';
     cover.innerHTML=
