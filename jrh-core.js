@@ -356,7 +356,17 @@
         document.querySelectorAll('.jrh-sigrole-zh').forEach(function(el,i){
           var enEl=document.querySelectorAll('.jrh-sigrole-en')[i];
           var zh=el.value.trim();
-          if(zh)roles.push({zh:zh,en:enEl?enEl.value.trim():''});
+          var en=enEl?enEl.value.trim():'';
+          var dflt=DEFAULT_SIG_ROLES[i]||{zh:'',en:''};
+          // Fill a cleared field with that slot's own default rather than
+          // skipping it — skipping shifted later custom entries into the
+          // wrong slot (e.g. clearing the middle field made the third
+          // field's custom label get stored as the second field's value),
+          // and separately caused this array's length to fall below 3,
+          // which made buildCover() below discard the customization
+          // entirely and fall back to all-default labels even though the
+          // user had already paid to unlock it.
+          roles.push({zh:zh||dflt.zh,en:en||dflt.en});
         });
         // The three inputs are always pre-filled with the default labels
         // for discoverability, so `roles` is never actually empty — without
@@ -690,7 +700,16 @@ window.jrhPrint=function(docName){
         '<div class="jc-office">'+esc(profile.companyName)+'</div>'+
         (profile.firmRegNumber?'<div class="jc-firmreg">登記字號：'+esc(profile.firmRegNumber)+'</div>':'')
       : '<div class="jc-office">儒鴻結構技師事務所</div>';
-    var sigRoles=(profile&&profile.signatureRoles&&profile.signatureRoles.length===3)?profile.signatureRoles:DEFAULT_SIG_ROLES;
+    // Map by index against the 3 fixed slots rather than requiring the
+    // stored array be exactly length 3 — the save side now always sends
+    // length-3 arrays (see showProfileBox's save handler), but this stays
+    // defensive against any shorter/misaligned data saved before that fix,
+    // filling any missing slot with its own default instead of discarding
+    // the whole customization.
+    var sigRoles=DEFAULT_SIG_ROLES.map(function(dflt,i){
+      var custom=profile&&profile.signatureRoles&&profile.signatureRoles[i];
+      return (custom&&(custom.zh||custom.en))?{zh:custom.zh||dflt.zh,en:custom.en||dflt.en}:dflt;
+    });
     var sigValues=[get('pj-calc'),get('pj-review'),''];
     var licenseLine=(profile&&profile.licenseNumber)?'<br>證號 '+esc(profile.licenseNumber):'';
     var sigImg=(profile&&profile.signatureDataUrl)?'<br><img class="jc-sig-img" src="'+profile.signatureDataUrl+'">':'';
