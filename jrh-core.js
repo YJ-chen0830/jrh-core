@@ -923,13 +923,25 @@ window.jrhPrint=function(docName){
   var REC='jrh_records';
   function getRec(){try{return JSON.parse(localStorage.getItem(REC))||{};}catch(e){return{};}}
   function setRec(o){localStorage.setItem(REC,JSON.stringify(o));}
+  // jrh_records accumulates one entry per (project × tool) forever, with no
+  // eviction — resultHtml is the full innerHTML of a tool's result panel,
+  // and unlike other autosave writes this one shares localStorage's single
+  // per-origin quota with everything else on the page. A cap here on any
+  // one capture doesn't fix unbounded growth across many projects/tools,
+  // but it stops a single unusually large result panel (long tables, many
+  // sections) from being the one that tips the whole origin over quota.
+  var MAX_RESULT_HTML_LEN=200000;
   function captureRecord(){
     var resultEl=document.querySelector('[id$="-result"]');
     var procEl=document.querySelector('[id$="-proc-text"]');
     var h1=document.querySelector('h1');
+    var resultHtml=resultEl?resultEl.innerHTML:'';
+    if(resultHtml.length>MAX_RESULT_HTML_LEN){
+      resultHtml=resultHtml.slice(0,MAX_RESULT_HTML_LEN)+'<p style="color:#c00;">（內容過長，已截斷，合併報告中此工具的結果可能不完整）</p>';
+    }
     return {
       title:(h1?h1.textContent:document.title).trim(),
-      resultHtml:resultEl?resultEl.innerHTML:'',
+      resultHtml:resultHtml,
       procText:procEl?procEl.textContent:'',
       url:location.href.split('?')[0]
     };
@@ -1026,9 +1038,16 @@ window.jrhPrint=function(docName){
   }
   function applyBundle(name,bundle){
     ['jrh_projects','jrh_wf','jrh_records','jrh_revisions'].forEach(function(key,i){
-      var dfl=key==='jrh_revisions'?[]:{};
       var part=[bundle.fields,bundle.wf,bundle.records,bundle.revisions][i];
-      if(part===undefined)part=dfl;
+      // A bundle missing this key entirely (e.g. an older cloud-saved bundle
+      // from before `records`/`revisions` existed in the sync schema) used
+      // to fall back to an empty {}/[] default and overwrite whatever real
+      // local data existed for this project — silently wiping data that had
+      // simply never been synced up in that particular dimension yet.
+      // "Missing from the bundle" now means "leave the local value alone",
+      // not "the cloud says this is empty" — those are different things and
+      // only the latter should actually overwrite.
+      if(part===undefined)return;
       var all;try{all=JSON.parse(localStorage.getItem(key))||{};}catch(e){all={};}
       all[name]=part;
       localStorage.setItem(key,JSON.stringify(all));
