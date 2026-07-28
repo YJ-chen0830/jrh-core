@@ -402,13 +402,26 @@
     // would be a surprising side effect of a button labeled "clear
     // project-chain data".
     var clearArmed=false;
+    var clearArmedTimer=null;
+    var CLEAR_LABEL='清除本機專案串接資料';
     document.getElementById('jrh-acc-clear-local').addEventListener('click',function(e){
       if(!clearArmed){
         clearArmed=true;
         e.target.textContent='確定清除？（此瀏覽器上不可復原）';
         e.target.style.color='#c00';
+        // Auto-revert if the user doesn't confirm within a few seconds —
+        // without this, "armed" state persisted indefinitely for as long as
+        // the modal stayed open, so a later, unrelated click on this same
+        // button (having forgotten it was already armed) would trigger the
+        // destructive clear with no fresh confirmation step at all.
+        clearArmedTimer=setTimeout(function(){
+          clearArmed=false;
+          e.target.textContent=CLEAR_LABEL;
+          e.target.style.color='#bbb';
+        },4000);
         return;
       }
+      clearTimeout(clearArmedTimer);
       localStorage.removeItem('jrh_outputs');
       localStorage.removeItem('jrh_projects');
       localStorage.removeItem('jrh_wf');
@@ -669,7 +682,15 @@ window.jrhPrint=function(docName){
       var nameEl=document.getElementById('pj-name');
       var name=(nameEl&&nameEl.value.trim())||'';
       if(!name){alert('請先填寫「工程名稱」再儲存專案。');return;}
-      var all=getAll();all[name]=snapshot();setAll(all);
+      var all=getAll();
+      // Only warn when this would overwrite a *different* already-saved
+      // project — re-saving the one currently selected in the dropdown is
+      // the normal, frequent "update my progress" flow and shouldn't be
+      // interrupted. The case worth catching is typing/pasting a name that
+      // happens to collide with an unrelated existing project, silently
+      // clobbering it.
+      if(all[name]&&sel.value!==name&&!confirm('已經有一個名稱相同的專案「'+name+'」，儲存會覆蓋它原本的內容，確定要繼續嗎？'))return;
+      all[name]=snapshot();setAll(all);
       refresh(name);
       var btn=this,t=btn.textContent;btn.textContent='✔ 已儲存';
       setTimeout(function(){btn.textContent=t;},1200);
@@ -1186,7 +1207,11 @@ window.jrhPrint=function(docName){
     if(target&&target.parentElement)target.parentElement.insertBefore(bar,target);
     else host.insertBefore(bar,host.firstChild);
     bar.querySelector('.jrh-in-yes').addEventListener('click',function(){
-      onAccept(out.data);
+      // Each tool page supplies its own onAccept to populate its fields from
+      // the handed-off data — if that per-tool logic throws on unexpected
+      // data shape, the banner should still go away instead of getting
+      // stuck on screen with a swallowed error and no visible feedback.
+      try{onAccept(out.data);}catch(e){console.error('showInboundBanner onAccept failed',e);}
       bar.remove();
     });
     bar.querySelector('.jrh-in-no').addEventListener('click',function(){
