@@ -368,7 +368,12 @@
     if(!unlocked){
       window.JRH.getCredits().then(function(c){
         var el=document.getElementById('jrh-acc-balance');
-        if(el&&c)el.textContent='目前點數餘額：'+c.balance+' 點'+(c.balance<BRANDING_COST?'（不足，可至工程計算中心首頁儲值）':'');
+        // Guard against an unexpected response shape (e.g. balance missing
+        // or non-numeric) rendering literally "undefined 點" instead of
+        // failing visibly or falling back to something sane.
+        var balance=c&&typeof c.balance==='number'?c.balance:null;
+        if(el&&balance!==null)el.textContent='目前點數餘額：'+balance+' 點'+(balance<BRANDING_COST?'（不足，可至工程計算中心首頁儲值）':'');
+        else if(el)el.textContent='目前點數餘額：查詢失敗';
       }).catch(function(){});
     }
     // This box now edits whatever /api/profile resolves to server-side —
@@ -645,9 +650,9 @@ window.jrhPrint=function(docName){
     if(o[el.id]!==undefined){el.value=o[el.id];localStorage.setItem('jrh_proj_'+el.id,el.value);}
   });}
   function init(){
-    var sec=document.querySelector('.proj-section');
-    if(!sec||document.getElementById('jrh-proj-sel'))return;
+    if(document.getElementById('jrh-proj-sel'))return;
     if(!fields().length)return;
+    var sec=document.querySelector('.proj-section');
     var bar=document.createElement('div');
     bar.className='no-print';
     bar.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;';
@@ -657,9 +662,22 @@ window.jrhPrint=function(docName){
       '<button type="button" id="jrh-proj-del" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1px solid #c0392b;border-radius:7px;background:#fff;color:#c0392b;cursor:pointer;">刪除</button>'+
       '<button type="button" id="jrh-proj-up" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1.5px solid #0b1f3a;border-radius:7px;background:#fff;color:#0b1f3a;cursor:pointer;">☁️ 同步到雲端</button>'+
       '<button type="button" id="jrh-proj-down" style="margin:0;width:auto;padding:8px 12px;font-size:12.5px;border:1.5px solid #0b1f3a;border-radius:7px;background:#fff;color:#0b1f3a;cursor:pointer;">⬇ 從雲端載入</button>';
-    var h3=sec.querySelector('h3');
-    if(h3&&h3.nextSibling) sec.insertBefore(bar,h3.nextSibling);
-    else sec.insertBefore(bar,sec.firstChild);
+    if(sec){
+      var h3=sec.querySelector('h3');
+      if(h3&&h3.nextSibling) sec.insertBefore(bar,h3.nextSibling);
+      else sec.insertBefore(bar,sec.firstChild);
+    }else{
+      // Some tool pages have pj-* fields (工程名稱 etc.) without wrapping
+      // them in a .proj-section container — this used to mean the entire
+      // multi-project switcher (dropdown, save/delete/sync buttons) never
+      // appeared at all on those pages, even though the underlying fields
+      // work fine and would sync correctly if the bar just existed. Fall
+      // back to inserting right before the first pj-* field's own
+      // container instead of requiring that specific class.
+      var firstField=fields()[0];
+      var container=firstField.closest('div,section,fieldset')||firstField.parentElement;
+      if(container&&container.parentElement)container.parentElement.insertBefore(bar,container);
+    }
     var sel=document.getElementById('jrh-proj-sel');
     // Project names are free-text user input rendered via innerHTML — the
     // value attribute was quote-escaped but the option's text content
@@ -1098,11 +1116,26 @@ window.jrhPrint=function(docName){
     // (network blip, or a 409 version conflict from another device) aborted
     // every remaining project with no report of which ones actually made
     // it, silently losing progress the user had no way to know about.
+    // The backend caps request bodies at 2MB — without checking client-side
+    // first, a project with many tools' worth of captured results (each up
+    // to captureRecord()'s own 200KB cap, but there's no limit on how many
+    // tools accumulate per project) would just fail with an opaque 413 or
+    // connection error, surfacing as an unhelpful generic "同步失敗" with no
+    // indication of why. 1.8MB leaves headroom for the {data:...,
+    // baseUpdatedAt:...} JSON wrapper around the bundle itself.
+    var MAX_BUNDLE_BYTES=1800000;
     return names.reduce(function(chain,name){
       return chain.then(function(){
+        var bundle=bundleFor(name);
+        if(JSON.stringify(bundle).length>MAX_BUNDLE_BYTES){
+          failed.push({name:name,message:'這個專案累積的資料量過大（超過同步上限），請考慮清理較舊或不需要的工具結果後再試'});
+          done++;
+          if(onProgress)onProgress(done,names.length,name);
+          return;
+        }
         return window.JRH.cloudApi('/api/projects/'+encodeURIComponent(name),{
           method:'PUT',
-          body:JSON.stringify({data:bundleFor(name),baseUpdatedAt:versions[name]||null})
+          body:JSON.stringify({data:bundle,baseUpdatedAt:versions[name]||null})
         }).then(function(resp){
           if(resp&&resp.updated_at)setVersion(name,resp.updated_at);
           succeeded.push(name);
@@ -1166,7 +1199,15 @@ window.jrhPrint=function(docName){
   function saveOutput(data){
     var proj=currentProj();
     var tool=(document.body&&document.body.dataset&&document.body.dataset.tool)||'';
-    if(!proj||!tool)return;
+    if(!proj||!tool){
+      // Without a project name, this result can't be handed off to a
+      // downstream tool (showInboundBanner keys off project name) — this
+      // used to fail with zero trace, so a user filling in "工程名稱" only
+      // after producing a result would never know why the next tool's
+      // "偵測到...是否帶入？" banner never showed up.
+      console.warn('saveOutput: 缺少工程名稱，這筆結果不會被記錄供其他工具帶入');
+      return;
+    }
     var all=getAllOut();
     if(!all[proj])all[proj]={};
     all[proj][tool]={data:data,date:today()};
