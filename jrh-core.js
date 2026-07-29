@@ -412,11 +412,52 @@
     document.getElementById('jrh-acc-logo-file').addEventListener('change',function(e){
       pendingLogoFile=e.target.files&&e.target.files[0]||null;
       if(pendingLogoFile)fileToCompressedDataUrl(pendingLogoFile).then(function(url){updatePreview('jrh-acc-logo-file','jrh-acc-logo-preview',url);}).catch(function(){});
+      updateSaveLabel();
     });
     document.getElementById('jrh-acc-sig-file').addEventListener('change',function(e){
       pendingSigFile=e.target.files&&e.target.files[0]||null;
       if(pendingSigFile)fileToCompressedDataUrl(pendingSigFile).then(function(url){updatePreview('jrh-acc-sig-file','jrh-acc-sig-preview',url);}).catch(function(){});
+      updateSaveLabel();
     });
+    // Before this, an unlocked=false user saw "解鎖並儲存（扣5點）" on the
+    // button no matter what — including someone who only ever wanted to
+    // flip the free date-format dropdown and touched nothing else. Mirrors
+    // profile.js's own wantsBranding check (the actual server-side gate)
+    // so the button never promises/threatens a charge that won't happen.
+    if(!unlocked){
+      var okBtn=document.getElementById('jrh-acc-ok');
+      var updateSaveLabel=function(){
+        var wantsBranding=
+          document.getElementById('jrh-acc-company').value.trim()||
+          document.getElementById('jrh-acc-calc').value.trim()||
+          document.getElementById('jrh-acc-review').value.trim()||
+          document.getElementById('jrh-acc-license').value.trim()||
+          document.getElementById('jrh-acc-firmreg').value.trim()||
+          document.getElementById('jrh-acc-disclaimer').value.trim()||
+          pendingLogoFile||pendingSigFile||
+          Array.prototype.some.call(document.querySelectorAll('.jrh-sigrole-zh,.jrh-sigrole-en'),function(el,i){
+            var idx=parseInt(el.getAttribute('data-i'),10);
+            var dflt=DEFAULT_SIG_ROLES[idx]||{zh:'',en:''};
+            var isEn=el.className.indexOf('jrh-sigrole-en')!==-1;
+            return el.value.trim()!==(isEn?dflt.en:dflt.zh);
+          });
+        okBtn.textContent=wantsBranding?'解鎖並儲存（扣 '+BRANDING_COST+' 點）':'儲存設定';
+      };
+      ['jrh-acc-company','jrh-acc-calc','jrh-acc-review','jrh-acc-license','jrh-acc-firmreg','jrh-acc-disclaimer'].forEach(function(id){
+        document.getElementById(id).addEventListener('input',updateSaveLabel);
+      });
+      document.querySelectorAll('.jrh-sigrole-zh,.jrh-sigrole-en').forEach(function(el){
+        el.addEventListener('input',updateSaveLabel);
+      });
+      // Run once immediately — the common case this fix targets (a
+      // not-yet-unlocked user who only ever touches the free date-format
+      // dropdown and clicks save without typing anything else) never fires
+      // any of the listeners above, so without this the button would sit on
+      // its initial "解鎖並儲存（扣5點）" markup for the entire interaction.
+      updateSaveLabel();
+    } else {
+      var updateSaveLabel=function(){};
+    }
     ov.addEventListener('click',function(e){if(e.target===ov)ov.remove();});
     document.getElementById('jrh-acc-cl').addEventListener('click',function(){ov.remove();});
     document.getElementById('jrh-acc-logout').addEventListener('click',function(){
@@ -851,7 +892,18 @@ window.jrhPrint=function(docName){
     try{
       var proj=get('pj-name');
       var revs=proj&&(JSON.parse(localStorage.getItem('jrh_revisions')||'{}')[proj]);
-      if(revs&&revs.length)latestRev=revs[revs.length-1];
+      // Not revs[revs.length-1] — workflow.html's importJSON() merges
+      // cross-device revision histories by appending incoming entries onto
+      // the existing array regardless of date, so array order doesn't
+      // reliably track chronological order after a merge. date (always
+      // YYYY-MM-DD from new Date(), see workflow.html's addRevBtn handler)
+      // sorts correctly as a plain string, unlike rev which is a free-text
+      // label ("A", "1.2", anything) with no consistent ordering.
+      if(revs&&revs.length){
+        latestRev=revs.reduce(function(best,r){
+          return (!best||(r.date||'')>(best.date||''))?r:best;
+        },null);
+      }
     }catch(e){}
     var rows=[
       ['工程地點',get('pj-loc')],['承造廠商',get('pj-contractor')],
