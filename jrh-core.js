@@ -312,7 +312,7 @@
     });
   }
 
-  var BRANDING_COST=5;
+  var BRANDING_COST=299;
   var DEFAULT_SIG_ROLES=[{zh:'計算者',en:'Prepared by'},{zh:'審核者',en:'Checked by'},{zh:'核准者',en:'Approved by'}];
   function h(s){return String(s==null?'':s).replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
