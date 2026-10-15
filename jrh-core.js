@@ -1420,6 +1420,127 @@ window.jrhPrint=function(docName){
   else render();
 })();
 
+/* ── 下一步建議（連擊）──
+   上面的「相關工具」是雙向、一進頁面就列出；這裡是有方向的「做完這一步，
+   通常接著做什麼」，在使用者真的做完時才主動詢問：
+   1. 工具算完呼叫 JRH.saveOutput()（串接用的工具都會呼叫）
+   2. 列印／存 PDF 之後（所有工具都適用）
+   3. 右下角「🔗 下一步」按鈕，隨時可以叫出來
+   順序依首頁「常見工作流程」的 7 組串接，加上既有資料鏈的上下游關係。
+   「之後再說」本次瀏覽不再自動跳出；「不再提示」這個工具以後都不自動跳出
+   （按鈕仍可手動叫出）。 */
+(function(){
+  var BASE='https://yj-chen0830.github.io/';
+  var INFO={
+    ro:['逕流廢水削減計畫','runoff'],dr:['雨水下水道及揚程','drainage'],dp:['雨水滯洪池容量設計','detention-pond'],srd:['基地保水設計','site-retention-design'],
+    adm:['進度網狀圖與S曲線','adm-and-Scurve'],rl:['資源負荷計算','resource-loading'],scr:['工期趕工成本分析','schedule-crashing'],tia:['工期展延分析','schedule-delay-analysis'],
+    pta:['抽水試驗分析','pumping-test-analysis'],dwt:['降水計畫','dewatering'],
+    pgs:['基樁群樁效率與沉陷','pile-group-settlement'],stl:['地層壓密沉陷量估算','settlement-calc'],
+    bsm:['梁剪力彎矩圖','beam-shear-and-moment-diagram'],rcb:['RC 梁斷面設計','RC-Beam-Steel-Design'],rcd:['RC 梁撓度計算','RC-Beams-deflection'],
+    trs:['桁架分析','truss-analysis'],stc:['鋼構接合計算','steel-connection'],beg:['螺栓群偏心接合分析','bolt-group-eccentric'],
+    lc:['載重組合計算','load-combo'],rcpm:['RC 柱 P-M 互動圖','RC-Column-PM-Interaction'],rsw:['RC 剪力牆設計','rc-shear-wall'],rw:['擋土牆設計','retaining-wall'],
+    wfc:['堰流量計算','weir-flow-calculation'],hjc:['水躍消能計算','hydraulic-jump-calculation'],
+    dwd:['連續壁入土深度設計','diaphragm-wall-design'],esd:['開挖支撐軸力與挫屈檢核','excavation-strut-design'],
+    bsg:['攔污柵與沉砂池設計','bar-screen-grit-chamber'],csd:['混凝沉澱池設計','coagulation-sedimentation-design'],asd:['廢水處理槽體設計','activated-sludge-design'],scd:['二次沉澱池設計','secondary-clarifier-design'],cct:['消毒接觸池設計','chlorine-contact-tank'],
+    sla:['土壤液化評估','soil-liquefaction-assessment'],spc:['單樁承載力','single-pile-capacity']
+  };
+  var NEXT={
+    ro:['dr'],dr:['dp'],dp:['srd'],
+    adm:['rl','tia'],rl:['scr'],
+    pta:['dwt'],pgs:['stl'],
+    bsm:['rcb'],rcb:['rcd'],
+    trs:['stc'],stc:['beg'],
+    lc:['rcb','rcpm','rsw','stc','rw'],
+    wfc:['hjc'],dwd:['esd'],
+    bsg:['csd'],csd:['asd'],asd:['scd'],scd:['cct'],
+    sla:['spc']
+  };
+  var tool=(document.body&&document.body.dataset&&document.body.dataset.tool)||'';
+  var next=(NEXT[tool]||[]).filter(function(c){return INFO[c];});
+  if(!next.length)return;
+
+  var SESSION_KEY='jrh_next_later_'+tool, MUTE_KEY='jrh_next_mute_'+tool;
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function currentProj(){
+    var el=document.getElementById('pj-name');
+    return (el?el.value.trim():'')||(localStorage.getItem('jrh_proj_pj-name')||'').trim();
+  }
+  function injectStyles(){
+    if(document.getElementById('jrh-next-css'))return;
+    var s=document.createElement('style');s.id='jrh-next-css';
+    s.textContent='#jrh-next{position:fixed;left:18px;bottom:20px;z-index:8001;width:340px;max-width:calc(100vw - 36px);background:#fff;border:1.5px solid #c9a14a;border-radius:14px;box-shadow:0 10px 36px rgba(11,31,58,.22);padding:16px 18px 14px;font-family:"Noto Sans TC","Segoe UI",sans-serif;color:#333;animation:jrhNextIn .25s ease;}@keyframes jrhNextIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}#jrh-next h4{margin:0 26px 4px 0;font-size:14.5px;font-weight:900;color:#0b1f3a;}#jrh-next .jrh-next-sub{font-size:12px;color:#777;margin:0 0 10px;line-height:1.6;}#jrh-next .jrh-next-list{display:flex;flex-direction:column;gap:7px;}#jrh-next a.jrh-next-go{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:9px;background:#0b1f3a;color:#fff;text-decoration:none;font-size:13px;font-weight:700;}#jrh-next a.jrh-next-go:hover{background:#13284a;}#jrh-next .jrh-next-hint{font-size:11.5px;color:#8a6d1f;background:#fdf7ec;border-radius:7px;padding:7px 10px;margin:10px 0 0;line-height:1.6;}#jrh-next .jrh-next-foot{display:flex;gap:14px;justify-content:flex-end;margin-top:10px;}#jrh-next .jrh-next-foot button{border:none;background:none;padding:0;font-size:12px;color:#999;cursor:pointer;}#jrh-next .jrh-next-foot button:hover{color:#555;text-decoration:underline;}#jrh-next-x{position:absolute;top:10px;right:10px;width:26px;height:26px;border:none;border-radius:50%;background:#f2f0ea;color:#777;cursor:pointer;font-size:13px;line-height:1;}#jrh-fab-next{background:#fff;color:#0b1f3a;border:1.5px solid #c9a14a!important;}@media print{#jrh-next{display:none!important;}}';
+    document.head.appendChild(s);
+  }
+  function close(){var el=document.getElementById('jrh-next');if(el)el.remove();}
+  function show(trigger){
+    injectStyles();
+    close();
+    var title=trigger==='manual'?'🔗 接下來常用的工具':'✅ 這一步完成了！接下來常用：';
+    var hint='';
+    if(trigger==='save'){
+      var proj=currentProj();
+      hint=proj
+        ?'這次的結果已存在「'+esc(proj)+'」專案下，下一個工具若支援帶入，開啟後會詢問是否帶入。'
+        :'在上方填寫「工程名稱」後重新計算，下一個工具就能直接帶入這次的結果。';
+    }
+    var box=document.createElement('div');
+    box.id='jrh-next';box.className='no-print';box.setAttribute('role','dialog');box.setAttribute('aria-label','下一步建議');
+    box.innerHTML='<button type="button" id="jrh-next-x" aria-label="關閉">✕</button><h4>'+title+'</h4>'
+      +'<p class="jrh-next-sub">依常見工作流程整理，會在新分頁開啟。</p>'
+      +'<div class="jrh-next-list">'+next.map(function(c){
+        return '<a class="jrh-next-go" href="'+BASE+INFO[c][1]+'/" target="_blank" rel="noopener"><span>'+esc(INFO[c][0])+'</span><span>→</span></a>';
+      }).join('')+'</div>'
+      +(hint?'<p class="jrh-next-hint">💡 '+hint+'</p>':'')
+      +(trigger==='manual'?'':'<div class="jrh-next-foot"><button type="button" data-act="later">之後再說</button><button type="button" data-act="mute">這個工具不再自動提示</button></div>');
+    document.body.appendChild(box);
+    box.querySelector('#jrh-next-x').addEventListener('click',function(){
+      if(trigger!=='manual')sessionStorage.setItem(SESSION_KEY,'1');
+      close();
+    });
+    box.addEventListener('click',function(e){
+      var act=e.target&&e.target.getAttribute&&e.target.getAttribute('data-act');
+      if(act==='later'){sessionStorage.setItem(SESSION_KEY,'1');close();}
+      else if(act==='mute'){localStorage.setItem(MUTE_KEY,'1');close();}
+      else if(e.target.closest&&e.target.closest('a.jrh-next-go')){sessionStorage.setItem(SESSION_KEY,'1');setTimeout(close,300);}
+    });
+  }
+  var autoTimer=null;
+  function autoShow(trigger){
+    if(localStorage.getItem(MUTE_KEY)||sessionStorage.getItem(SESSION_KEY))return;
+    if(document.getElementById('jrh-next'))return;
+    // 很多工具每次改輸入值就重算一次（每次都會呼叫 saveOutput），延遲一下、
+    // 只在使用者停手後跳一次，不要邊打字邊跳。
+    clearTimeout(autoTimer);
+    autoTimer=setTimeout(function(){show(trigger);},trigger==='save'?2500:400);
+  }
+
+  window.JRH=window.JRH||{};
+  var origSave=window.JRH.saveOutput;
+  if(typeof origSave==='function'){
+    window.JRH.saveOutput=function(){
+      var r=origSave.apply(this,arguments);
+      autoShow('save');
+      return r;
+    };
+  }
+  window.addEventListener('afterprint',function(){autoShow('print');});
+  window.JRH.showNextStep=function(){show('manual');};
+
+  function addFabButton(){
+    var fab=document.getElementById('jrh-fab');
+    if(!fab||document.getElementById('jrh-fab-next'))return;
+    injectStyles();
+    var b=document.createElement('button');
+    b.type='button';b.className='jrh-fb-fab';b.id='jrh-fab-next';b.textContent='🔗 下一步';
+    b.addEventListener('click',function(){
+      if(document.getElementById('jrh-next'))close();else show('manual');
+    });
+    fab.insertBefore(b,fab.firstChild);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addFabButton);
+  else addFabButton();
+})();
+
 /* ── 計算書示意圖共用元件（SVG）──
    各工具在算完之後呼叫 JRH.diagram.wrap(...) 組出的 HTML 字串，直接塞進自己
    的 result innerHTML 即可（會跟著印在畫面上與 PDF 裡，不需要另外處理）。
