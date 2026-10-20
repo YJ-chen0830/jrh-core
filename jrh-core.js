@@ -1600,3 +1600,61 @@ window.jrhPrint=function(docName){
   window.JRH=window.JRH||{};
   window.JRH.diagram={wrap:wrap,dim:dim,arrow:arrow,label:label,esc:esc};
 })();
+
+/* ════════════════════════════════════════════════════════
+   網址搬遷提示（只在舊網址 yj-chen0830.github.io 顯示）
+   ════════════════════════════════════════════════════════
+   工具即將從 yj-chen0830.github.io/<工具>/ 搬到 juhongstructural.com/<工具>/。
+   瀏覽器的本機資料（localStorage）是依網域分開存的，搬家後不會自動帶過去，
+   所以搬家前在舊網址顯示提示，並提供「搬移我的資料」：開一個新網址的小視窗
+   （頂層視窗，才寫得進新網域自己的 localStorage），用 postMessage 把舊網址
+   的資料交給它。新網址已有的同名資料不覆蓋。搬家後舊網址會直接轉址，這段
+   程式不會再執行，之後可以整段刪掉。 */
+(function(){
+  if(location.hostname!=='yj-chen0830.github.io')return;
+  var MOVE_AT='10/20（二）23:00';
+  var TARGET='https://juhongstructural.com';
+  var HIDE_KEY='jrh_move_banner_hidden';
+  function hidden(){try{return sessionStorage.getItem(HIDE_KEY)==='1';}catch(e){return false;}}
+  function snapshot(){
+    var data={};
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);data[k]=localStorage.getItem(k);}
+    return data;
+  }
+  function transfer(statusEl,btn){
+    var data=snapshot(),n=Object.keys(data).length;
+    if(!n){statusEl.textContent='這個瀏覽器沒有需要搬移的資料。';return;}
+    var w=window.open(TARGET+'/migrate.html','jrh_migrate','width=480,height=360');
+    if(!w){statusEl.textContent='小視窗被瀏覽器擋住了，請允許彈出視窗後再按一次。';return;}
+    btn.disabled=true;statusEl.textContent='搬移中…';
+    var done=false;
+    function onMsg(e){
+      if(e.origin!==TARGET||e.source!==w||!e.data||typeof e.data!=='object')return;
+      if(e.data.type==='jrh-migrate-ready'){w.postMessage({type:'jrh-migrate-data',data:data},TARGET);}
+      else if(e.data.type==='jrh-migrate-done'){
+        done=true;window.removeEventListener('message',onMsg);
+        statusEl.textContent='✔ 已搬移 '+e.data.written+' 筆資料'+(e.data.skipped?'（'+e.data.skipped+' 筆新網址已有，未覆蓋）':'')+'。';
+      }
+    }
+    window.addEventListener('message',onMsg);
+    setTimeout(function(){if(!done){btn.disabled=false;statusEl.textContent='沒有收到回應，請再按一次。';}},20000);
+  }
+  function show(){
+    if(hidden()||document.getElementById('jrh-move-bar'))return;
+    var bar=document.createElement('div');
+    bar.id='jrh-move-bar';bar.setAttribute('role','status');
+    bar.style.cssText='position:relative;z-index:8500;background:#FBF7EC;border-bottom:1px solid #E3CE96;color:#3d3420;font:13px/1.6 "Noto Sans TC","Segoe UI",sans-serif;padding:9px 44px 9px 16px;';
+    bar.innerHTML='🔔 <b>網址即將變更</b>：'+MOVE_AT+' 起，所有工具搬到 <b>juhongstructural.com</b>（舊網址會自動轉址）。'+
+      '瀏覽器裡的本機資料（專案資訊、Email、登入狀態、暫存結果）不會自動帶過去，請在搬遷前按 '+
+      '<button type="button" id="jrh-move-go" style="margin:0 4px;padding:3px 11px;border:none;border-radius:6px;background:#0b1f3a;color:#fff;font:inherit;font-weight:700;cursor:pointer;">搬移我的資料</button>'+
+      '<span id="jrh-move-st" style="color:#1a6e35;font-weight:700;"></span>'+
+      '<button type="button" id="jrh-move-x" aria-label="關閉提示" style="position:absolute;right:10px;top:7px;border:none;background:none;font-size:18px;color:#8a7a50;cursor:pointer;">×</button>';
+    document.body.insertBefore(bar,document.body.firstChild);
+    var st=document.getElementById('jrh-move-st'),go=document.getElementById('jrh-move-go');
+    go.addEventListener('click',function(){transfer(st,go);});
+    document.getElementById('jrh-move-x').addEventListener('click',function(){
+      bar.remove();try{sessionStorage.setItem(HIDE_KEY,'1');}catch(e){}
+    });
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',show);else show();
+})();
