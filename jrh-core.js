@@ -15,6 +15,18 @@
   }
 })();
 
+/* ── 廣告欄位：載入首頁 repo 的 ads/ads.js（設定在 ads/config.json，預設全關）。
+   只在正式網域載入；工具頁沒有 data-ad-slot 時會加在頁面最下方，列印時隱藏。 */
+(function(){
+  var h=location.hostname;
+  if(h!=='juhongstructural.com' && h!=='www.juhongstructural.com')return;
+  var s=document.createElement('script');
+  s.async=true;
+  s.src='https://juhongstructural.com/ads/ads.js';
+  s.setAttribute('data-placement','tool');
+  document.head.appendChild(s);
+})();
+
 /* ── GA4 (only on the real production hosts, not localhost/dev testing) ── */
 (function(){
   var h=location.hostname;
